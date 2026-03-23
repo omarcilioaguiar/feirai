@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FeirAI - Gestão Inteligente</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Phosphor Icons (Modern Icons) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Chart.js for Reports -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="app" class="app-container">
+        <!-- Header -->
+        <header class="top-nav">
+            <div class="logo">
+                <i class="ph-fill ph-leaf"></i>
+                <h1>FeirAI</h1>
+            </div>
+            <div class="header-actions">
+                <button id="theme-toggle" class="icon-btn"><i class="ph ph-moon"></i></button>
+            </div>
+        </header>
+
+        <!-- Main Content Area for Views -->
+        <main id="view-container" class="view-container">
+            <!-- Views will be injected here dynamically -->
+        </main>
+
+        <!-- Bottom Navigation Mobile First -->
+        <nav class="bottom-nav">
+            <button class="nav-item active" data-view="home">
+                <i class="ph ph-shopping-cart"></i>
+                <span>Feira</span>
+            </button>
+            <button class="nav-item" data-view="products">
+                <i class="ph ph-package"></i>
+                <span>Produtos</span>
+            </button>
+            <button class="nav-item" data-view="places">
+                <i class="ph ph-storefront"></i>
+                <span>Locais</span>
+            </button>
+            <button class="nav-item" data-view="reports">
+                <i class="ph ph-chart-pie-slice"></i>
+                <span>Relatórios</span>
+            </button>
+            <button class="nav-item" data-view="history">
+                <i class="ph ph-clock-counter-clockwise"></i>
+                <span>Histórico</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Modals Container -->
+    <div id="modal-container"></div>
+
+    <!-- JS Application -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>
