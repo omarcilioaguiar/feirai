@@ -1,4 +1,4 @@
-import { ShoppingCartSimple, Trash, Storefront, Sparkle, Plus, CheckCircle, QrCode } from '@phosphor-icons/react';
+import { ShoppingCartSimple, Trash, Storefront, Sparkle, Plus, CheckCircle, QrCode, CloudArrowUp } from '@phosphor-icons/react';
 import { useState, useEffect } from 'react';
 import api from '../api';
 import Modal from '../components/Modal';
@@ -30,6 +30,9 @@ export default function Home() {
     const [isScannerOpen, setScannerOpen] = useState(false);
     const [isParsingReceipt, setIsParsingReceipt] = useState(false);
     const [scrapedItems, setScrapedItems] = useState(null);
+
+    // Backup State
+    const [isBackingUp, setIsBackingUp] = useState(false);
 
         // Initial Load & Restore Persistent Cart and Session Place
     useEffect(() => {
@@ -209,6 +212,19 @@ export default function Home() {
         }
     };
 
+    const handleBackup = async () => {
+        setIsBackingUp(true);
+        try {
+            const res = await api.post('/backup');
+            alert(res.data.message || "Backup sincronizado com sucesso!");
+        } catch (err) {
+            console.error(err);
+            alert(err.response?.data?.error || "Erro ao sicronizar o backup.");
+        } finally {
+            setIsBackingUp(false);
+        }
+    };
+
     const removeCartItem = (id) => setCart(cart.filter(i => i.id !== id));
 
     const totalCart = cart.reduce((sum, item) => sum + item.total, 0);
@@ -300,6 +316,14 @@ export default function Home() {
                 } else setScannerOpen(true);
             }}>
                 <QrCode weight="bold" />
+            </button>
+
+            <button className="fab-backup" onClick={handleBackup} disabled={isBackingUp}>
+                {isBackingUp ? (
+                    <div className="spinner" style={{ width: '24px', height: '24px', border: '3px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                ) : (
+                    <CloudArrowUp weight="bold" />
+                )}
             </button>
 
             <button className="fab" onClick={() => {

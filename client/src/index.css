@@ -527,7 +527,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .fab-secondary {
     position: fixed;
-    bottom: calc(var(--nav-height) + 1.5rem);
+    bottom: calc(var(--nav-height) + 6rem);
     left: 1.5rem;
     width: 60px;
     height: 60px;
@@ -545,9 +545,28 @@ h1, h2, h3, h4, h5, h6 {
     transition: var(--transition);
 }
 
-.fab-secondary:hover, .fab-secondary:active {
+.fab-backup {
+    position: fixed;
+    bottom: calc(var(--nav-height) + 1.5rem);
+    left: 1.5rem;
+    width: 60px;
+    height: 60px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+    border: none;
+    cursor: pointer;
+    z-index: 30;
+    transition: var(--transition);
+}
+
+.fab-secondary:hover, .fab-secondary:active, .fab-backup:hover, .fab-backup:active {
     transform: scale(1.05) translateY(-2px);
-    box-shadow: 0 6px 20px rgba(168, 85, 247, 0.5);
 }
 
 /* Charts container */

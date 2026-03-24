@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const cheerio = require('cheerio');
+const fs = require('fs');
+const path = require('path');
 const { dbAll, dbRun, dbGet } = require('./db');
 const { v4: uuidv4 } = require('uuid'); // fallback to simple generation if no uuid library
 const app = express();
@@ -365,6 +367,61 @@ app.post('/api/optimize-list', async (req, res) => {
         res.json(result);
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+// --- Local Backups ---
+app.post('/api/backup', async (req, res) => {
+    try {
+        const backupDir = '/app/backups';
+        const dbSource = process.env.DB_PATH || '/app/feirai.sqlite';
+        
+        // Ensure the backup directory exists (in case the mount is absent temporarily)
+        if (!fs.existsSync(backupDir)) {
+            return res.status(500).json({ error: 'Diretório de backup não está acessível no container (/app/backups)' });
+        }
+
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+
+        const backupFilename = `feirai_${year}_${month}_${day}_${hours}_${minutes}_${seconds}.sqlite`;
+        const backupDest = path.join(backupDir, backupFilename);
+
+        fs.copyFileSync(dbSource, backupDest);
+
+        // Rotation logic: keep only 3 backups
+        const files = fs.readdirSync(backupDir).filter(f => f.startsWith('feirai_') && f.endsWith('.sqlite'));
+        
+        // Map with stats to sort strictly by time
+        const mappedFiles = files.map(file => {
+            const filepath = path.join(backupDir, file);
+            return {
+                name: file,
+                filepath,
+                time: fs.statSync(filepath).mtime.getTime()
+            };
+        });
+
+        // Sort descending (newest first)
+        mappedFiles.sort((a, b) => b.time - a.time);
+
+        // If more than 3, delete oldest
+        if (mappedFiles.length > 3) {
+            const filesToDelete = mappedFiles.slice(3);
+            for (const f of filesToDelete) {
+                fs.unlinkSync(f.filepath);
+            }
+        }
+
+        res.json({ success: true, message: `Backup ${backupFilename} criado com sucesso. Mantendo apenas os 3 mais recentes.` });
+    } catch (e) {
+        console.error('Backup Erro:', e);
+        res.status(500).json({ error: 'Falha ao sincronizar o backup: ' + e.message });
     }
 });
 
