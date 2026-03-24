@@ -1,4 +1,4 @@
-import { Plus, Storefront, Trash, PencilSimple } from '@phosphor-icons/react';
+import { Plus, Storefront, Trash, PencilSimple, MapPin } from '@phosphor-icons/react';
 import { useState, useEffect } from 'react';
 import api from '../api';
 import Modal from '../components/Modal';
@@ -13,54 +13,67 @@ export default function Places() {
         api.get('/places').then(res => setPlaces(res.data)).catch(console.error);
     }, []);
 
-    // Whenever modal opens, try initializing new PlaceAutocompleteElement
+    const [searchQuery, setSearchQuery] = useState('');
+    const [suggestions, setSuggestions] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
+
+    // Native debounced search for places using our new backend proxy
     useEffect(() => {
-        if (isModalOpen) {
-            const initAutocomplete = async () => {
-                const container = document.getElementById('autocomplete-container');
-                if (!container || !window.google) return;
-                
-                try {
-                    // Use new importLibrary if available, otherwise fallback to existing places library
-                    const { PlaceAutocompleteElement } = window.google.maps.importLibrary ? 
-                        await window.google.maps.importLibrary("places") : 
-                        window.google.maps.places;
-                    
-                    if (!PlaceAutocompleteElement) return;
-
-                    // Clear previous instances
-                    container.innerHTML = '';
-                    
-                    const autocomplete = new PlaceAutocompleteElement();
-                    
-                    // Add listener for the new API
-                    autocomplete.addEventListener('gmp-placeselect', async (event) => {
-                        const place = event.place;
-                        if (!place) return;
-                        
-                        await place.fetchFields({ fields: ['formattedAddress', 'displayName', 'location'] });
-
-                        setFormData(prev => ({
-                            ...prev,
-                            location: place.formattedAddress || place.displayName,
-                            lat: place.location ? place.location.lat() : null,
-                            lng: place.location ? place.location.lng() : null
-                        }));
-                    });
-
-                    // Styling to match the app
-                    autocomplete.style.width = "100%";
-                    autocomplete.style.backgroundColor = "transparent";
-                    autocomplete.style.color = "var(--text-primary)";
-
-                    container.appendChild(autocomplete);
-                } catch (e) {
-                    console.error("Autocomplete error:", e);
-                }
-            };
-            setTimeout(initAutocomplete, 100);
+        if (!searchQuery || searchQuery.trim().length === 0) {
+            setSuggestions([]);
+            return;
         }
-    }, [isModalOpen]);
+
+        const debounceTimer = setTimeout(async () => {
+            setIsSearching(true);
+            try {
+                const res = await api.get(`/maps/autocomplete?input=${encodeURIComponent(searchQuery)}`);
+                if (res.data && res.data.predictions) {
+                    setSuggestions(res.data.predictions);
+                }
+            } catch (err) {
+                console.error("Autocomplete backend error:", err);
+            } finally {
+                setIsSearching(false);
+            }
+        }, 300); // 300ms debounce
+
+        return () => clearTimeout(debounceTimer);
+    }, [searchQuery]);
+
+    const handleSelectSuggestion = async (place_id, description, main_text) => {
+        try {
+            // Optimistic update of the input
+            setSearchQuery(description);
+            setSuggestions([]); // hide dropdown
+            
+            const res = await api.get(`/maps/details?place_id=${place_id}`);
+            const details = res.data.result;
+            
+            if (details) {
+                const address = details.formatted_address || description;
+                const name = details.name || main_text || "";
+                
+                let latitude = null;
+                let longitude = null;
+                
+                if (details.geometry && details.geometry.location) {
+                    latitude = details.geometry.location.lat;
+                    longitude = details.geometry.location.lng;
+                }
+
+                setFormData(prev => ({
+                    ...prev,
+                    name: prev.name || name, 
+                    location: address,
+                    lat: latitude,
+                    lng: longitude
+                }));
+            }
+        } catch (error) {
+            console.error("Details fetch error:", error);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -104,6 +117,8 @@ export default function Places() {
         setModalOpen(false);
         setIsEditing(null);
         setFormData({ name: '', location: '', lat: null, lng: null });
+        setSearchQuery('');
+        setSuggestions([]);
     };
 
     return (
@@ -125,7 +140,10 @@ export default function Places() {
                         <div className="card" key={place.id} style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <strong>{place.name}</strong>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{place.location}</div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                                    <MapPin size={14} weight="fill" style={{ color: place.location ? 'var(--primary)' : 'var(--text-tertiary)' }} />
+                                    {place.location || 'Sem endereço cadastrado'}
+                                </div>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button className="icon-btn" onClick={() => handleEdit(place)} style={{ color: 'var(--primary)' }}>
@@ -146,15 +164,61 @@ export default function Places() {
                         <label>Nome do Local</label>
                         <input type="text" className="form-control" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Ex: Carrefour" />
                     </div>
-                    <div className="form-group">
-                        <label>Endereço/Detalhes (Busque pelo Google Maps)</label>
-                        <div id="autocomplete-container" style={{ 
-                            background: 'rgba(255, 255, 255, 0.05)', 
-                            border: '1px solid var(--border)', 
-                            borderRadius: 'var(--radius-sm)',
-                            padding: '4px',
-                            minHeight: '45px'
-                        }}></div>
+                    <div className="form-group" style={{ position: 'relative' }}>
+                        <label>Busque o Endereço (Google Maps)</label>
+                        <input 
+                            type="text" 
+                            className="form-control" 
+                            placeholder="Digite o nome ou endereço do local..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={{ marginBottom: '0.5rem' }}
+                        />
+                        {/* Native Custom Dropdown for Google Maps Suggestions */}
+                        {suggestions.length > 0 && (
+                            <ul style={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                right: 0,
+                                background: 'var(--surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius-sm)',
+                                zIndex: 9999,
+                                listStyle: 'none',
+                                margin: 0,
+                                padding: 0,
+                                maxHeight: '200px',
+                                overflowY: 'auto',
+                                boxShadow: 'var(--shadow-md)'
+                            }}>
+                                {suggestions.map((sug) => (
+                                    <li 
+                                        key={sug.place_id}
+                                        onClick={() => handleSelectSuggestion(sug.place_id, sug.description, sug.structured_formatting?.main_text)}
+                                        style={{
+                                            padding: '10px 12px',
+                                            cursor: 'pointer',
+                                            borderBottom: '1px solid var(--border)',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '0.9rem'
+                                        }}
+                                        onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+                                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                                    >
+                                        <strong>{sug.structured_formatting?.main_text || sug.description}</strong><br/>
+                                        <small style={{ color: 'var(--text-secondary)' }}>{sug.structured_formatting?.secondary_text || ''}</small>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+
+                        {formData.location && (
+                            <div style={{ fontSize: '0.8rem', color: 'var(--primary)', padding: '4px', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', marginTop: '0.5rem' }}>
+                                <strong>Endereço Selecionado:</strong><br/>
+                                {formData.location}
+                            </div>
+                        )}
                     </div>
                     <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: '1rem' }}>Salvar Local</button>
                 </form>

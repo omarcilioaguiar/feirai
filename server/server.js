@@ -60,14 +60,15 @@ app.get('/api/places', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
-
 app.put('/api/places/:id', async (req, res) => {
     const { id } = req.params;
     const { name, location, lat, lng } = req.body;
+    console.log('Atualizando local:', { id, name, location, lat, lng });
     try {
         await dbRun('UPDATE Place SET name = ?, location = ?, lat = ?, lng = ? WHERE id = ?', [name, location, lat, lng, id]);
         res.json({ success: true });
     } catch (e) {
+        console.error('Erro ao atualizar local:', e);
         res.status(500).json({ error: e.message });
     }
 });
@@ -81,13 +82,16 @@ app.delete('/api/places/:id', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+
 app.post('/api/places', async (req, res) => {
     const { name, location, lat, lng } = req.body;
+    console.log('Criando local:', { name, location, lat, lng });
     const id = generateId();
     try {
         await dbRun('INSERT INTO Place (id, name, location, lat, lng) VALUES (?, ?, ?, ?, ?)', [id, name, location, lat || null, lng || null]);
         res.json({ id, name, location, lat, lng });
     } catch (e) {
+        console.error('Erro ao criar local:', e);
         res.status(500).json({ error: e.message });
     }
 });
@@ -121,6 +125,40 @@ app.post('/api/sessions', async (req, res) => {
         res.json({ success: true, id: runId });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+// --- Maps API Proxy ---
+app.get('/api/maps/autocomplete', async (req, res) => {
+    const { input } = req.query;
+    if (!input) return res.json({ predictions: [] });
+    
+    // We can restrict search region or types here if needed (e.g. components=country:br)
+    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+    
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        res.json(data);
+    } catch (e) {
+        console.error('Maps autocomplete error:', e);
+        res.status(500).json({ error: 'Failed to fetch autocomplete predictions' });
+    }
+});
+
+app.get('/api/maps/details', async (req, res) => {
+    const { place_id } = req.query;
+    if (!place_id) return res.status(400).json({ error: 'place_id is required' });
+    
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place_id}&fields=name,formatted_address,geometry&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+    
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        res.json(data);
+    } catch (e) {
+        console.error('Maps details error:', e);
+        res.status(500).json({ error: 'Failed to fetch place details' });
     }
 });
 

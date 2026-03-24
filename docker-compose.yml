@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: feirai_backend
+    ports:
+      - "3005:3005"
+    volumes:
+      - ./server/feirai.sqlite:/app/feirai.sqlite
+    environment:
+      - DB_PATH=/app/feirai.sqlite
+      - NODE_ENV=production
+      - GOOGLE_MAPS_API_KEY=AIzaSyD5aeM5GoOJl8jisVo5AZjzW3ZbovFHluo
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: feirai_frontend
+    ports:
+      - "80:80"
+      - "5173:80" # Mapping 5173 for backward compatibility
+    depends_on:
+      - backend
+    restart: unless-stopped
