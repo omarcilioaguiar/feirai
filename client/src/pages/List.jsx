@@ -47,7 +47,8 @@ export default function List() {
             unit: i.unit,
             price: i.deal ? i.deal.price : 0, 
             qty: i.quantity,
-            total: (i.deal ? i.deal.price : 0) * i.quantity
+            total: (i.deal ? i.deal.price : 0) * i.quantity,
+            shoppingListId: i.id
         }));
 
         // Merge carts? No, according to instructions: "clear the cart"
@@ -57,11 +58,6 @@ export default function List() {
         localStorage.setItem('feirai_active_cart', JSON.stringify(newCart));
         localStorage.setItem('feirai_session_place', marketId);
         localStorage.setItem('feirai_skip_confirm', 'true'); // Flag to skip the confirm on Home
-        
-        // Remove from ShoppingList (all items in this export)
-        for (const i of items) {
-            await api.delete(`/shopping-list/${i.id}`);
-        }
         
         // Redirect to Home
         navigate('/');

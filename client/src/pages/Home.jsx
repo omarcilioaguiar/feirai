@@ -210,7 +210,8 @@ export default function Home() {
         };
 
         if (editingItemId) {
-            setCart(cart.map(item => item.id === editingItemId ? newItem : item));
+            const oldItem = cart.find(i => i.id === editingItemId);
+            setCart(cart.map(item => item.id === editingItemId ? { ...newItem, shoppingListId: oldItem?.shoppingListId } : item));
         } else {
             setCart([...cart, newItem]);
         }
@@ -357,6 +358,17 @@ export default function Home() {
                         discount: i.discount || 0
                     }))
                 });
+                // Clear from economy list (it was finalized)
+                for (const item of cart) {
+                    if (item.shoppingListId) {
+                        try {
+                            await api.delete(`/shopping-list/${item.shoppingListId}`);
+                        } catch (err) {
+                            console.error("Erro ao remover item da lista de economia:", err);
+                        }
+                    }
+                }
+                
                 setCart([]);
                 setOverallDiscount(0);
                 alert("Feira finalizada com sucesso!");

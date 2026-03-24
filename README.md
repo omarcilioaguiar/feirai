@@ -83,7 +83,9 @@ Abra o endereço indicado (ex: `http://localhost:5173`) no seu navegador ou celu
 *   **📊 Tendências de Consumo**: Dashboard de relatórios agora indica o melhor dia da semana para comprar cada item com base em IA histórica.
 *   **🧠 Insights de Economia**: Relatório proativo que mostra onde estão as maiores oportunidades de economia por produto.
 *   **📱 UI Responsiva & Refinada**: Redesign completo dos modais de edição e histórico para perfeita visualização em dispositivos móveis.
-*   **⚙️ Estabilidade & Logs**: Implementação de sistema fail-safe para carregamento de dados e logs de erro automatizados.
+### [24/03/2026] - Persistência & Segurança de Dados
+*   **🛡️ Persistência Inteligente**: Itens na Lista de Economia agora são mantidos no banco de dados mesmo após serem exportados para a feira ativa. Eles só são removidos definitivamente quando a compra é **finalizada com sucesso** no histórico, garantindo que nenhum planejamento seja perdido caso a feira seja abandonada.
+*   **🎯 Rastreamento de Itens**: Vinculação interna de IDs que garante que apenas os itens efetivamente cobrados no checkout sejam baixados da sua lista de planejamento original.
 
 ---
 
