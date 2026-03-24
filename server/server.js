@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const cheerio = require('cheerio');
 const { dbAll, dbRun, dbGet } = require('./db');
 const { v4: uuidv4 } = require('uuid'); // fallback to simple generation if no uuid library
 const app = express();
@@ -22,7 +23,7 @@ app.get('/api/products', async (req, res) => {
 
 app.put('/api/products/:id', async (req, res) => {
     const { id } = req.params;
-    const { name, category, unit, brand } = req.body;
+    const { name, category = 'Geral', unit = 'un', brand = null } = req.body;
     try {
         await dbRun('UPDATE Product SET name = ?, category = ?, unit = ?, brand = ? WHERE id = ?', [name, category, unit, brand, id]);
         res.json({ success: true });
@@ -41,10 +42,10 @@ app.delete('/api/products/:id', async (req, res) => {
     }
 });
 app.post('/api/products', async (req, res) => {
-    const { name, category, unit, brand } = req.body;
+    const { name, category = 'Geral', unit = 'un', brand = null } = req.body;
     const id = generateId();
     try {
-        await dbRun('INSERT INTO Product (id, name, category, unit, brand) VALUES (?, ?, ?, ?, ?)', [id, name, category, unit, brand || null]);
+        await dbRun('INSERT INTO Product (id, name, category, unit, brand) VALUES (?, ?, ?, ?, ?)', [id, name, category, unit, brand]);
         res.json({ id, name, category, unit, brand });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -123,6 +124,116 @@ app.post('/api/sessions', async (req, res) => {
             );
         }
         res.json({ success: true, id: runId });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- QR Code NFC-e Parsers ---
+app.post('/api/receipts/parse', async (req, res) => {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'URL is required' });
+    
+    try {
+        const response = await fetch(url);
+        const html = await response.text();
+        const $ = cheerio.load(html);
+        
+        let placeName = $('#u20').text().trim() || $('.txtTopo').first().text().trim() || 'Supermercado (Via QR)';
+        
+        const items = [];
+        $('#tabResult tr').each((i, el) => {
+            const name = $(el).find('.txtTit').text().trim();
+            if (!name) return;
+            
+            let qtyText = $(el).find('span:contains("Qtde")').text() || $(el).find('.Rqtd').text() || '1';
+            let qty = parseFloat(qtyText.replace(/[^\d,.]/g, '').replace(',', '.')) || 1;
+            
+            let unText = $(el).find('span:contains("UN:")').text() || $(el).find('.RUN').text() || 'un';
+            let unit = unText.replace('UN:', '').trim().toLowerCase() || 'un';
+            
+            let priceText = $(el).find('span:contains("Vl. Unit.:")').text() || $(el).find('.RvlUnit').text() || '0';
+            let val = parseFloat(priceText.replace(/[^\d,.]/g, '').replace(',', '.')) || 0;
+            if (val === 0) {
+                 let tot = parseFloat($(el).find('.valor').text().replace(/[^\d,.]/g, '').replace(',', '.')) || 0;
+                 val = tot / qty;
+            }
+            
+            items.push({ name, qty, unit, price: val, total: val * qty });
+        });
+        
+        // "AI" similarity matching to map scraped items to existing items
+        const existingProducts = await dbAll('SELECT * FROM Product');
+        
+        const findSimilarProduct = (scrapedName) => {
+            const words = scrapedName.toLowerCase().split(' ').filter(w => w.length > 2);
+            let bestMatch = null;
+            let maxScore = 0;
+            
+            for (const p of existingProducts) {
+                let score = 0;
+                for (const w of words) {
+                    if (p.name.toLowerCase().includes(w)) score++;
+                }
+                if (score > maxScore) {
+                    maxScore = score;
+                    bestMatch = p;
+                }
+            }
+            return maxScore > 0 ? bestMatch : null;
+        };
+        
+        const mappedItems = items.map(item => {
+            const match = findSimilarProduct(item.name);
+            return {
+                ...item,
+                suggestedProductId: match ? match.id : null,
+                suggestedProductName: match ? match.name : item.name,
+                isNew: !match
+            };
+        });
+        
+        res.json({ placeName, items: mappedItems });
+    } catch (error) {
+        console.error('NFC-e Parse Error:', error);
+        res.status(500).json({ error: 'Failed to parse receipt' });
+    }
+});
+
+app.post('/api/sessions/import', async (req, res) => {
+    const { placeId, placeName, items } = req.body;
+    try {
+        let finalPlaceId = placeId;
+        if (!finalPlaceId && placeName) {
+            finalPlaceId = generateId();
+            await dbRun('INSERT INTO Place (id, name, location, lat, lng) VALUES (?, ?, ?, null, null)', [finalPlaceId, placeName, 'Importado via NFC-e']);
+        }
+        
+        const runId = generateId();
+        const date = new Date().toISOString();
+        let total = 0;
+        
+        for (const item of items) {
+            let prodId = item.suggestedProductId;
+            
+            if (!prodId || item.isNew) {
+                prodId = generateId();
+                await dbRun('INSERT INTO Product (id, name, category, unit, brand) VALUES (?, ?, ?, ?, ?)', 
+                    [prodId, item.suggestedProductName || item.name, 'Geral', item.unit || 'un', null]);
+            }
+            
+            const itemTotal = item.qty * item.price;
+            total += itemTotal;
+            
+            await dbRun(
+                'INSERT INTO ShoppingItem (id, run_id, product_id, place_id, price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
+                [generateId(), runId, prodId, finalPlaceId, item.price, item.qty]
+            );
+        }
+        
+        await dbRun('INSERT INTO ShoppingRun (id, date, total_amount) VALUES (?, ?, ?)', [runId, date, total]);
+        
+        res.json({ success: true, runId });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

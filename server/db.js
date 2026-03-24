@@ -2,7 +2,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 // Connect to SQLite DB
-const dbPath = path.resolve(__dirname, 'feirai.sqlite');
+const dbPath = process.env.DB_PATH || path.resolve(__dirname, 'feirai.sqlite');
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('Error opening database', err.message);

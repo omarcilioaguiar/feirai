@@ -7,7 +7,7 @@ export default function Products() {
     const [products, setProducts] = useState([]);
     const [isModalOpen, setModalOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(null);
-    const [formData, setFormData] = useState({ name: '', category: '', brand: '', unit: 'kg' });
+    const [formData, setFormData] = useState({ name: '', unit: 'kg' });
 
     useEffect(() => {
         api.get('/products').then(res => setProducts(res.data)).catch(console.error);
@@ -42,13 +42,13 @@ export default function Products() {
 
     const handleEdit = (p) => {
         setIsEditing(p.id);
-        setFormData({ name: p.name, category: p.category, brand: p.brand || '', unit: p.unit });
+        setFormData({ name: p.name, unit: p.unit });
         setModalOpen(true);
     };
 
     const closeModal = () => {
         setIsEditing(null);
-        setFormData({ name: '', category: '', brand: '', unit: 'kg' });
+        setFormData({ name: '', unit: 'kg' });
         setModalOpen(false);
     };
 
@@ -70,9 +70,9 @@ export default function Products() {
                     products.map(p => (
                         <div className="card" key={p.id} style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
-                                <strong>{p.name} {p.brand ? `- ${p.brand}` : ''}</strong>
+                                <strong>{p.name}</strong>
                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                                    Categoria: {p.category} | {p.unit}
+                                    Unidade: {p.unit}
                                 </div>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
@@ -93,14 +93,6 @@ export default function Products() {
                     <div className="form-group">
                         <label>Nome do Produto</label>
                         <input type="text" className="form-control" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Ex: Arroz Branco" />
-                    </div>
-                    <div className="form-group">
-                        <label>Categoria</label>
-                        <input type="text" className="form-control" required value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} placeholder="Ex: Grãos" />
-                    </div>
-                    <div className="form-group">
-                        <label>Marca</label>
-                        <input type="text" className="form-control" value={formData.brand} onChange={e => setFormData({ ...formData, brand: e.target.value })} placeholder="Ex: Nestlé" />
                     </div>
                     <div className="form-group">
                         <label>Unidade de Medida</label>

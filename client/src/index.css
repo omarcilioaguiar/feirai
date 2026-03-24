@@ -525,6 +525,31 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
 }
 
+.fab-secondary {
+    position: fixed;
+    bottom: calc(var(--nav-height) + 1.5rem);
+    left: 1.5rem;
+    width: 60px;
+    height: 60px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(135deg, #a855f7, #7e22ce);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
+    border: none;
+    cursor: pointer;
+    z-index: 30;
+    transition: var(--transition);
+}
+
+.fab-secondary:hover, .fab-secondary:active {
+    transform: scale(1.05) translateY(-2px);
+    box-shadow: 0 6px 20px rgba(168, 85, 247, 0.5);
+}
+
 /* Charts container */
 .chart-container {
     position: relative;
