@@ -104,10 +104,52 @@ app.post('/api/places', async (req, res) => {
 });
 
 // --- History / Sessions Route ---
+// --- Shopping List (Future Purchases) ---
+app.get('/api/shopping-list', async (req, res) => {
+    try {
+        const rows = await dbAll(`
+            SELECT sl.*, p.name as productName, p.unit
+            FROM ShoppingList sl
+            JOIN Product p ON sl.product_id = p.id
+            ORDER BY created_at DESC
+        `);
+        res.json(rows);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/shopping-list', async (req, res) => {
+    const { productId, quantity = 1 } = req.body;
+    const id = generateId();
+    const now = new Date().toISOString();
+    try {
+        await dbRun('INSERT INTO ShoppingList (id, product_id, quantity, created_at, done) VALUES (?, ?, ?, ?, 0)', [id, productId, quantity, now]);
+        res.json({ id, productId, quantity, created_at: now });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/shopping-list/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await dbRun('DELETE FROM ShoppingList WHERE id = ?', [id]);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/sessions', async (req, res) => {
     try {
-        const runs = await dbAll('SELECT * FROM ShoppingRun ORDER BY date DESC');
-        // We can fetch items or leave it for a detail route
+        const query = `
+            SELECT r.*, p.name as placeName 
+            FROM ShoppingRun r
+            LEFT JOIN Place p ON r.place_id = p.id
+            ORDER BY date DESC
+        `;
+        const runs = await dbAll(query);
         res.json(runs);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -115,18 +157,21 @@ app.get('/api/sessions', async (req, res) => {
 });
 
 app.post('/api/sessions', async (req, res) => {
-    const { total, items } = req.body;
-    // items: [{productId, placeId, price, quantity}]
+    const { total, items, discount = 0, place_id } = req.body;
+    // items: [{productId, placeId, price, quantity, discount}]
     const runId = generateId();
     const date = new Date().toISOString();
     try {
-        await dbRun('INSERT INTO ShoppingRun (id, date, total_amount) VALUES (?, ?, ?)', [runId, date, total]);
+        const activePlaceId = (place_id || (items.length > 0 ? (items[0].placeId || items[0].place_id) : null)) || null;
+        await dbRun('INSERT INTO ShoppingRun (id, date, total_amount, discount, place_id) VALUES (?, ?, ?, ?, ?)', [runId, date, total, discount, activePlaceId]);
         
         for (const item of items) {
             const itemId = generateId();
+            const pId = item.productId || item.product_id;
+            const plId = item.placeId || item.place_id || activePlaceId;
             await dbRun(
-                'INSERT INTO ShoppingItem (id, run_id, product_id, place_id, price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
-                [itemId, runId, item.productId, item.placeId, item.price, item.quantity]
+                'INSERT INTO ShoppingItem (id, run_id, product_id, place_id, price, quantity, discount) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [itemId, runId, pId, plId, item.price, item.quantity, item.discount || 0]
             );
         }
         res.json({ success: true, id: runId });
@@ -145,7 +190,7 @@ app.get('/api/sessions/:id', async (req, res) => {
             SELECT i.*, p.name as productName, p.unit, pl.name as placeName
             FROM ShoppingItem i
             JOIN Product p ON i.product_id = p.id
-            JOIN Place pl ON i.place_id = pl.id
+            LEFT JOIN Place pl ON i.place_id = pl.id
             WHERE i.run_id = ?
         `, [id]);
         
@@ -157,21 +202,25 @@ app.get('/api/sessions/:id', async (req, res) => {
 
 app.put('/api/sessions/:id', async (req, res) => {
     const { id } = req.params;
-    const { total, items, date } = req.body;
+    const { total, items, date, discount = 0, place_id } = req.body;
     try {
-        await dbRun('UPDATE ShoppingRun SET total_amount = ?, date = ? WHERE id = ?', [total, date, id]);
+        const activePlaceId = place_id || null;
+        await dbRun('UPDATE ShoppingRun SET total_amount = ?, date = ?, discount = ?, place_id = ? WHERE id = ?', [total, date, discount, activePlaceId, id]);
         
         // Simpler to delete and re-insert items for the session
         await dbRun('DELETE FROM ShoppingItem WHERE run_id = ?', [id]);
         for (const item of items) {
             const itemId = generateId();
+            const pId = item.productId || item.product_id;
+            const plId = item.placeId || item.place_id || activePlaceId;
             await dbRun(
-                'INSERT INTO ShoppingItem (id, run_id, product_id, place_id, price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
-                [itemId, id, item.productId, item.placeId, item.price, item.quantity]
+                'INSERT INTO ShoppingItem (id, run_id, product_id, place_id, price, quantity, discount) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [itemId, id, pId, plId, item.price, item.quantity, item.discount || 0]
             );
         }
         res.json({ success: true });
     } catch (e) {
+        console.error('Error updating session:', e);
         res.status(500).json({ error: e.message });
     }
 });
@@ -370,12 +419,44 @@ app.get('/api/reports/summary', async (req, res) => {
             LIMIT 5
         `);
 
+        // Intelligence: Savings Opportunities (Best Price per Product)
+        const savingsOpportunities = await dbAll(`
+            SELECT pr.name as productName, pr.unit, MIN(i.price) as bestPrice, pl.name as placeName
+            FROM ShoppingItem i
+            JOIN Product pr ON i.product_id = pr.id
+            JOIN Place pl ON i.place_id = pl.id
+            GROUP BY pr.id
+            ORDER BY pr.name ASC
+        `);
+
+        // Intelligence: Purchase Trends (Best Day of Week per Product) - Robust & Simple
+        let purchaseTrends = [];
+        try {
+            purchaseTrends = await dbAll(`
+                SELECT i.product_id as productId, pr.name as productName, 
+                       strftime('%w', r.date) as bestDay, 
+                       MIN(i.price) as bestAvgPrice
+                FROM ShoppingItem i
+                JOIN ShoppingRun r ON i.run_id = r.id
+                JOIN Product pr ON i.product_id = pr.id
+                GROUP BY i.product_id
+                LIMIT 15
+            `);
+        } catch (trendError) {
+            console.error("Trend Query Error:", trendError);
+            // Fallback to empty if trends fail, so the rest of the report works
+            purchaseTrends = [];
+        }
+
         res.json({
             favPlace: mostFrequentedPlace,
             chartData,
-            categories
+            categories,
+            savingsOpportunities,
+            purchaseTrends
         });
     } catch (e) {
+        console.error("General Report Error:", e);
         res.status(500).json({ error: e.message });
     }
 });

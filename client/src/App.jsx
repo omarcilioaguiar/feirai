@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
-import { ShoppingCart, Package, Storefront, ChartPieSlice, ClockCounterClockwise, Leaf, Moon } from '@phosphor-icons/react';
+import { ShoppingCart, Package, Storefront, ChartPieSlice, ClockCounterClockwise, Leaf, Moon, ShoppingBag } from '@phosphor-icons/react';
 import { useState, useEffect } from 'react';
 import Home from './pages/Home';
 import Products from './pages/Products';
@@ -7,6 +7,7 @@ import Places from './pages/Places';
 import Reports from './pages/Reports';
 import History from './pages/History';
 import Indica from './pages/Indica';
+import List from './pages/List';
 import './index.css';
 
 function App() {
@@ -54,6 +55,7 @@ function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/history" element={<History />} />
             <Route path="/indica" element={<Indica />} />
+            <Route path="/list" element={<List />} />
           </Routes>
         </main>
 
@@ -98,14 +100,14 @@ function App() {
               </>
             )}
           </NavLink>
-          <NavLink to="/indica" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-             {({ isActive }) => (
-              <>
-                <Leaf weight={isActive ? "fill" : "regular"} />
-                <span>Indica</span>
-              </>
-            )}
-          </NavLink>
+           <NavLink to="/list" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              {({ isActive }) => (
+               <>
+                 <ShoppingBag weight={isActive ? "fill" : "regular"} />
+                 <span>Lista</span>
+               </>
+             )}
+           </NavLink>
         </nav>
       </div>
     </Router>

@@ -1,4 +1,4 @@
-import { ShoppingBag, Trash, CaretDown, CaretUp, PencilSimple, Plus, Save, X } from '@phosphor-icons/react';
+import { ShoppingBag, Trash, CaretDown, CaretUp, PencilSimple, Plus, Save, X, Storefront } from '@phosphor-icons/react';
 import { useState, useEffect } from 'react';
 import api from '../api';
 import Modal from '../components/Modal';
@@ -73,10 +73,12 @@ export default function History() {
 
     const handleSaveEdit = async () => {
         try {
-            const total = editingSession.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+            const totalItems = editingSession.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+            const finalTotal = Math.max(0, totalItems - (editingSession.discount || 0));
+            
             await api.put(`/sessions/${editingSession.id}`, {
                 ...editingSession,
-                total: total
+                total: finalTotal
             });
             setEditingSession(null);
             loadHistory();
@@ -92,14 +94,15 @@ export default function History() {
         }
     };
 
-    const updateEditingItem = (index, field, value) => {
-        const newItems = [...editingSession.items];
-        newItems[index] = { ...newItems[index], [field]: value };
+    const updateEditingItem = (itemId, field, value) => {
+        const newItems = editingSession.items.map(item => 
+            item.id === itemId ? { ...item, [field]: value } : item
+        );
         setEditingSession({ ...editingSession, items: newItems });
     };
 
-    const removeEditingItem = (index) => {
-        const newItems = editingSession.items.filter((_, i) => i !== index);
+    const removeEditingItem = (itemId) => {
+        const newItems = editingSession.items.filter(item => item.id !== itemId);
         setEditingSession({ ...editingSession, items: newItems });
     };
 
@@ -114,8 +117,13 @@ export default function History() {
                 ) : (
                     history.map(h => (
                         <div className="card premium-card" key={h.id} style={{ marginBottom: '1rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                <strong>{formatDate(h.date)}</strong>
+                            <div className="card-header-flex" style={{ marginBottom: '0.5rem' }}>
+                                <div>
+                                    <strong style={{ display: 'block' }}>{formatDate(h.date)}</strong>
+                                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <Storefront size={16} /> {h.placeName || "Local não informado"}
+                                    </span>
+                                </div>
                                 <strong style={{ color: 'var(--primary)', fontSize: '1.2rem' }}>
                                     {formatCurrency(h.total_amount)}
                                 </strong>
@@ -123,12 +131,22 @@ export default function History() {
                             
                             {expandedSessionId === h.id && sessionItems[h.id] && (
                                 <div style={{ marginBottom: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
-                                    {sessionItems[h.id].map((item, idx) => (
-                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
-                                            <span>{item.productName} ({Math.round(item.quantity)}{item.unit})</span>
-                                            <span>{formatCurrency(item.price * item.quantity)}</span>
+                                    {sessionItems[h.id].slice()
+                                        .sort((a,b) => (a.productName || '').localeCompare(b.productName || ''))
+                                        .map((item, idx) => (
+                                        <div key={idx} style={{ marginBottom: '0.8rem' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                                                <span>{item.productName || 'Produto s/ Nome'} ({item.unit === 'kg' ? (item.quantity || 0).toFixed(3) : Math.round(item.quantity || 0)}{item.unit})</span>
+                                                <span>{formatCurrency((item.price || 0) * (item.quantity || 0))}</span>
+                                            </div>
                                         </div>
                                     ))}
+                                    {h.discount > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--primary)', borderTop: '1px dashed var(--border)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
+                                            <span>DESCONTO DA FEIRA</span>
+                                            <span>-{formatCurrency(h.discount)}</span>
+                                        </div>
+                                    )}
                                     {sessionItems[h.id].length === 0 && <p style={{ fontSize: '0.8rem' }}>Sem itens registrados.</p>}
                                 </div>
                             )}
@@ -165,7 +183,7 @@ export default function History() {
             </div>
 
             {/* Modal for Editing Session */}
-            <Modal isOpen={editingSession !== null} onClose={() => setEditingSession(null)} title="Editar Histórico da Feira">
+            <Modal isOpen={editingSession !== null} onClose={() => setEditingSession(null)} title="Editar Histórico da Feira" className="modal-wide">
                 {editingSession && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <div className="form-group">
@@ -178,49 +196,94 @@ export default function History() {
                             />
                         </div>
 
-                        <div style={{ maxHeight: '400px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <label>Itens da Feira</label>
-                            {editingSession.items.map((item, idx) => (
-                                <div key={idx} className="card" style={{ padding: '12px', border: '1px solid var(--border)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center' }}>
-                                        <strong style={{ fontSize: '0.9rem' }}>{item.productName}</strong>
-                                        <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => removeEditingItem(idx)}>
+                        <div className="form-group">
+                            <label>Local da Compra</label>
+                            <select 
+                                className="form-control" 
+                                value={editingSession.place_id || ""} 
+                                onChange={(e) => setEditingSession({ ...editingSession, place_id: e.target.value })}
+                            >
+                                <option value="" disabled>Escolha o local...</option>
+                                {places.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                        </div>
+
+                        <div style={{ maxHeight: '420px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem', padding: '4px' }}>
+                            <label style={{ fontWeight: 600, fontSize: '0.9rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>Itens da Feira</label>
+                            {editingSession.items
+                                .slice()
+                                .sort((a, b) => (a.productName || '').localeCompare(b.productName || ''))
+                                .map((item) => (
+                                <div key={item.id} style={{ 
+                                    padding: '16px', 
+                                    borderRadius: 'var(--radius-md)', 
+                                    border: '1px solid var(--border)', 
+                                    background: 'rgba(255,255,255,0.03)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '12px'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{item.productName || 'Produto s/ Nome'}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>{item.unit || 'UN'}</div>
+                                        </div>
+                                        <button className="icon-btn" style={{ color: 'var(--danger)', width: '32px', height: '32px' }} onClick={() => removeEditingItem(item.id)}>
                                             <Trash size={18} />
                                         </button>
                                     </div>
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                        <div style={{ flex: 1 }}>
-                                            <label style={{ fontSize: '0.7rem' }}>Qtd</label>
+
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                                        <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '80px' }}>
+                                            <label style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '2px', display: 'block' }}>Qtd</label>
                                             <input 
                                                 type="number" 
+                                                step={item.unit === 'kg' ? "0.001" : "1"}
                                                 className="form-control" 
-                                                value={item.quantity} 
-                                                onChange={(e) => updateEditingItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                                                value={item.quantity || 0} 
+                                                onChange={(e) => updateEditingItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
                                             />
                                         </div>
-                                        <div style={{ flex: 1 }}>
-                                            <label style={{ fontSize: '0.7rem' }}>Preço Unit.</label>
+                                        <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '80px' }}>
+                                            <label style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '2px', display: 'block' }}>R$ Unit/kg</label>
                                             <input 
                                                 type="number" 
                                                 step="0.01" 
                                                 className="form-control" 
-                                                value={item.price} 
-                                                onChange={(e) => updateEditingItem(idx, 'price', parseFloat(e.target.value) || 0)}
+                                                value={item.price || 0} 
+                                                onChange={(e) => updateEditingItem(item.id, 'price', parseFloat(e.target.value) || 0)}
                                             />
                                         </div>
-                                        <div style={{ flex: 1, textAlign: 'right' }}>
-                                            <label style={{ fontSize: '0.7rem' }}>Total</label>
-                                            <div style={{ fontWeight: 600, padding: '6px 0' }}>{formatCurrency(item.price * item.quantity)}</div>
+                                        <div style={{ flex: 1, minWidth: '80px', textAlign: 'right' }}>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Subtotal</div>
+                                            <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--primary)' }}>{formatCurrency((item.price || 0) * (item.quantity || 0))}</div>
                                         </div>
                                     </div>
                                 </div>
                             ))}
                         </div>
 
-                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem', textAlign: 'right' }}>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>TOTAL RECALCULADO</div>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--primary)' }}>
-                                {formatCurrency(editingSession.items.reduce((sum, i) => sum + (i.price * i.quantity), 0))}
+                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }}>
+                            <div className="form-group">
+                                <label style={{ fontSize: '0.8rem' }}>Desconto Geral da Feira (R$)</label>
+                                <input 
+                                    type="number" 
+                                    step="0.01" 
+                                    className="form-control" 
+                                    value={Number(editingSession.discount || 0).toFixed(2)} 
+                                    onChange={(e) => setEditingSession({ ...editingSession, discount: parseFloat(e.target.value) || 0 })}
+                                />
+                            </div>
+                            <div style={{ textAlign: 'right', marginTop: '1rem' }}>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>TOTAL RECALCULADO</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--primary)' }}>
+                                    {formatCurrency(
+                                        Math.max(0, 
+                                            editingSession.items.reduce((sum, i) => sum + (i.price * i.quantity), 0) 
+                                            - (editingSession.discount || 0)
+                                        )
+                                    )}
+                                </div>
                             </div>
                         </div>
 

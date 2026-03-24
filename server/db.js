@@ -44,8 +44,14 @@ function initDb() {
         db.run(`CREATE TABLE IF NOT EXISTS ShoppingRun (
             id TEXT PRIMARY KEY,
             date TEXT NOT NULL,
-            total_amount REAL NOT NULL
+            total_amount REAL NOT NULL,
+            discount REAL DEFAULT 0,
+            place_id TEXT NOT NULL,
+            FOREIGN KEY(place_id) REFERENCES Place(id)
         )`);
+
+        db.run('ALTER TABLE ShoppingRun ADD COLUMN place_id TEXT', (err) => {});
+        db.run('ALTER TABLE ShoppingRun ADD COLUMN discount REAL DEFAULT 0', (err) => {});
 
         // Shopping Items
         db.run(`CREATE TABLE IF NOT EXISTS ShoppingItem (
@@ -55,9 +61,21 @@ function initDb() {
             place_id TEXT NOT NULL,
             price REAL NOT NULL,
             quantity REAL NOT NULL,
+            discount REAL DEFAULT 0,
             FOREIGN KEY(run_id) REFERENCES ShoppingRun(id),
             FOREIGN KEY(product_id) REFERENCES Product(id),
             FOREIGN KEY(place_id) REFERENCES Place(id)
+        )`);
+
+        db.run('ALTER TABLE ShoppingItem ADD COLUMN discount REAL DEFAULT 0', (err) => {});
+        // Shopping List (Items for future purchase)
+        db.run(`CREATE TABLE IF NOT EXISTS ShoppingList (
+            id TEXT PRIMARY KEY,
+            product_id TEXT NOT NULL,
+            quantity REAL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            done INTEGER DEFAULT 0,
+            FOREIGN KEY(product_id) REFERENCES Product(id)
         )`);
     });
 }

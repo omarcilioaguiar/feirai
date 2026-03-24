@@ -1,0 +1,6 @@
+# Regras do Projeto FeirAI
+
+- Sempre que houver alterações no código backend ou de infraestrutura, deve-se reiniciar o servidor Docker para garantir que as mudanças sejam aplicadas corretamente.
+- Nomes de produtos devem ser sempre armazenados e exibidos em CAIXA ALTA.
+- O local da feira deve ser exibido no histórico.
+- Descontos devem ser aplicados apenas no valor total da feira, não em itens individuais.

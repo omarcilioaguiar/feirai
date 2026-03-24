@@ -5,6 +5,7 @@ import Modal from '../components/Modal';
 
 export default function Products() {
     const [products, setProducts] = useState([]);
+    const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setModalOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(null);
     const [formData, setFormData] = useState({ name: '', unit: 'kg' });
@@ -60,6 +61,15 @@ export default function Products() {
                     <Plus weight="bold" />
                 </button>
             </div>
+            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                <input 
+                    type="text" 
+                    className="form-control" 
+                    placeholder="Pesquisar produto..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+            </div>
             
             <div id="products-list">
                 {products.length === 0 ? (
@@ -67,7 +77,11 @@ export default function Products() {
                         <p>Nenhum produto cadastrado.</p>
                     </div>
                 ) : (
-                    products.map(p => (
+                    products
+                        .filter(p => p.name.toUpperCase().includes(searchTerm.toUpperCase()))
+                        .slice()
+                        .sort((a,b) => a.name.localeCompare(b.name))
+                        .map(p => (
                         <div className="card" key={p.id} style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <strong>{p.name}</strong>

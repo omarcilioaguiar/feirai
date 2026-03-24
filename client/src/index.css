@@ -123,6 +123,7 @@ h1, h2, h3, h4, h5, h6 {
     font-weight: 700;
     background: linear-gradient(135deg, var(--primary), var(--secondary));
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
@@ -647,6 +648,33 @@ h1, h2, h3, h4, h5, h6 {
         width: 100%;
         border-radius: var(--radius-lg) var(--radius-lg) 0 0;
         padding: 1.25rem 1rem;
+        max-width: none;
+    }
+}
+
+.text-truncate {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.modal-wide {
+    max-width: 600px;
+}
+
+/* Fix for long product names in list headers */
+.card-header-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+@media (max-width: 500px) {
+    .card-header-flex {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
     }
 }
 
@@ -763,3 +791,150 @@ h1, h2, h3, h4, h5, h6 {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* --- Speed Dial FAB System --- */
+.fab-container {
+    position: fixed;
+    bottom: calc(var(--nav-height) + 1.5rem);
+    right: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1rem;
+    z-index: 1000;
+}
+
+.speed-dial-menu {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.75rem;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(20px) scale(0.8);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.speed-dial-menu.open {
+    pointer-events: auto;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.speed-dial-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.speed-dial-item span {
+    background: var(--surface);
+    color: var(--text-primary);
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    transform: translateX(10px);
+    transition: all 0.2s 0.1s;
+}
+
+.speed-dial-menu.open .speed-dial-item span {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.speed-dial-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    color: white;
+    box-shadow: var(--shadow-lg);
+    border: none;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.speed-dial-btn:active {
+    transform: scale(0.9);
+}
+
+.main-fab {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+    font-size: 1.8rem;
+    z-index: 1001;
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
+}
+
+.main-fab.open {
+    transform: rotate(135deg);
+    background: var(--danger) !important;
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+}
+
+/* --- Searchable Select Component --- */
+.searchable-select-container {
+    position: relative;
+    width: 100%;
+}
+
+.searchable-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 2000;
+    max-height: 280px;
+    overflow-y: auto;
+    margin-top: 5px;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.searchable-select-item {
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: var(--transition);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.searchable-select-item:last-child {
+    border-bottom: none;
+}
+
+.searchable-select-item:hover {
+    background: rgba(16, 185, 129, 0.08);
+    padding-left: 20px;
+}
+
+.searchable-select-item.new-item {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.searchable-select-item .item-unit {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    background: var(--bg-main);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+

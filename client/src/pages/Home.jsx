@@ -1,4 +1,4 @@
-import { ShoppingCartSimple, Trash, Storefront, Sparkle, Plus, CheckCircle, QrCode, CloudArrowUp, Selection, Keyboard, PencilSimple } from '@phosphor-icons/react';
+import { ShoppingCartSimple, Trash, Storefront, Sparkle, Plus, CheckCircle, QrCode, CloudArrowUp, Selection, Keyboard, PencilSimple, Tag } from '@phosphor-icons/react';
 import { useState, useEffect } from 'react';
 import api from '../api';
 import Modal from '../components/Modal';
@@ -30,15 +30,27 @@ export default function Home() {
     const [userLocation, setUserLocation] = useState(null);
     const [editingItemId, setEditingItemId] = useState(null);
 
+    // Overall Discount State
+    const [overallDiscount, setOverallDiscount] = useState(0);
+    const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+
     // NFC-e Scanner State
     const [isScannerOpen, setScannerOpen] = useState(false);
+    const [isSpeedDialOpen, setSpeedDialOpen] = useState(false);
     const [isParsingReceipt, setIsParsingReceipt] = useState(false);
     const [scrapedItems, setScrapedItems] = useState(null);
 
     // Backup State
     const [isBackingUp, setIsBackingUp] = useState(false);
 
-        // Initial Load & Restore Persistent Cart and Session Place
+    // Searchable Drops State
+    const [productSearch, setProductSearch] = useState('');
+    const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+    const [placeSearch, setPlaceSearch] = useState('');
+    const [isPlaceDropdownOpen, setIsPlaceDropdownOpen] = useState(false);
+    const [paidAmount, setPaidAmount] = useState(''); // State for "Valor Pago" logic
+
+    // Initial Load & Restore Persistent Cart and Session Place
     useEffect(() => {
         api.get('/products').then(res => setProducts(res.data)).catch(console.error);
         api.get('/places').then(res => setPlaces(res.data)).catch(console.error);
@@ -46,17 +58,27 @@ export default function Home() {
         const savedSessionPlace = localStorage.getItem('feirai_session_place');
         if (savedSessionPlace) setSessionPlaceId(savedSessionPlace);
 
-        // Restore Cart from LocalStorage
+        // Restore Cart and Overall Discount from LocalStorage
         const savedCart = localStorage.getItem('feirai_active_cart');
+        const savedOverallDiscount = localStorage.getItem('feirai_active_discount');
+        const skipConfirm = localStorage.getItem('feirai_skip_confirm');
+
+        if (savedOverallDiscount) setOverallDiscount(parseFloat(savedOverallDiscount) || 0);
+
         if (savedCart) {
             const parsedCart = JSON.parse(savedCart);
             if (parsedCart.length > 0) {
-                if (confirm('Você possui uma feira em andamento. Deseja recuperar os itens no carrinho?')) {
+                if (skipConfirm === 'true') {
+                    setCart(parsedCart);
+                    localStorage.removeItem('feirai_skip_confirm');
+                } else if (confirm('Você possui uma feira em andamento. Deseja recuperar os itens no carrinho?')) {
                     setCart(parsedCart);
                 } else {
                     localStorage.removeItem('feirai_active_cart');
                     localStorage.removeItem('feirai_session_place');
+                    localStorage.removeItem('feirai_active_discount');
                     setSessionPlaceId('');
+                    setOverallDiscount(0);
                 }
             }
         }
@@ -70,16 +92,18 @@ export default function Home() {
         }
     }, []);
 
-    // Persist Cart to LocalStorage whenever it changes
+    // Persist Cart and Overall Discount to LocalStorage whenever they change
     useEffect(() => {
         if (cart.length > 0) {
             localStorage.setItem('feirai_active_cart', JSON.stringify(cart));
             localStorage.setItem('feirai_session_place', sessionPlaceId);
+            localStorage.setItem('feirai_active_discount', overallDiscount.toString());
         } else {
             localStorage.removeItem('feirai_active_cart');
             localStorage.removeItem('feirai_session_place');
+            localStorage.removeItem('feirai_active_discount');
         }
-    }, [cart, sessionPlaceId]);
+    }, [cart, sessionPlaceId, overallDiscount]);
 
     // Haversine formula to get distance in km
     const getDistance = (lat1, lon1, lat2, lon2) => {
@@ -124,8 +148,8 @@ export default function Home() {
 
                 setInsight({
                     message: infoMessage,
-                    placeId: bestOption.place_id,
-                    price: bestOption.price
+                    bestPrice: bestOption.price,
+                    bestPlace: bestOption.placeName
                 });
                 setPrice(bestOption.price);
             } else {
@@ -142,6 +166,26 @@ export default function Home() {
         }
         setSelectedProduct(pid);
         fetchInsight(pid);
+
+        // Reset qty based on new unit
+        const product = products.find(p => p.id === pid);
+        if (product && product.unit === 'kg') {
+            setQty(0);
+        } else {
+            setQty(1);
+        }
+    };
+
+    const handleQuantityChange = (val) => {
+        if (selectedProductUnit === 'kg') {
+            // Remove non-digits and shift by 1000 for kg items
+            const digits = val.replace(/\D/g, '');
+            if (digits === '') return setQty(0);
+            const num = parseInt(digits, 10);
+            setQty(num / 1000);
+        } else {
+            setQty(parseFloat(val) || 0);
+        }
     };
 
     const handleAddItem = (e) => {
@@ -215,6 +259,21 @@ export default function Home() {
         }
     };
 
+    const handleSaveToList = async () => {
+        if (!selectedProduct) return;
+        try {
+            await api.post('/shopping-list', {
+                productId: selectedProduct,
+                quantity: qty
+            });
+            setModalOpen(false);
+            alert("Item guardado na sua Lista de Economia!");
+        } catch (err) {
+            console.error(err);
+            alert("Erro ao salvar na lista");
+        }
+    };
+
     const handleOcrAnalysis = async (file) => {
         if (!file) return;
         setIsParsingReceipt(true);
@@ -281,16 +340,25 @@ export default function Home() {
 
     const removeCartItem = (id) => setCart(cart.filter(i => i.id !== id));
 
-    const totalCart = cart.reduce((sum, item) => sum + item.total, 0);
+    const totalCart = Math.max(0, cart.reduce((sum, item) => sum + item.total, 0) - overallDiscount);
 
     const finishShopping = async () => {
         if(confirm('Deseja finalizar esta feira e salvar no histórico?')) {
             try {
                 await api.post('/sessions', {
                     total: totalCart,
-                    items: cart.map(i => ({ productId: i.productId, placeId: i.placeId, price: i.price, quantity: i.qty }))
+                    discount: overallDiscount,
+                    place_id: sessionPlaceId,
+                    items: cart.map(i => ({ 
+                        productId: i.productId, 
+                        placeId: i.placeId, 
+                        price: i.price, 
+                        quantity: i.qty,
+                        discount: i.discount || 0
+                    }))
                 });
                 setCart([]);
+                setOverallDiscount(0);
                 alert("Feira finalizada com sucesso!");
             } catch (e) {
                 console.error(e);
@@ -299,33 +367,73 @@ export default function Home() {
         }
     };
 
+    const selectedProductUnit = products.find(p => p.id === selectedProduct)?.unit;
+
     return (
         <div>
             <div className="total-display">
-                <div className="total-label">Subtotal da Feira</div>
-                <div className="total-amount">
-                    <span className="currency">R$</span>
-                    <span>{totalCart.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <div>
+                        <div className="total-label">Subtotal da Feira</div>
+                        <div className="total-amount">
+                            <span className="currency">R$</span>
+                            <span>{totalCart.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                    </div>
+                    {cart.length > 0 && (
+                        <button 
+                            className="icon-btn" 
+                            style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '12px', borderRadius: '12px', color: overallDiscount > 0 ? 'var(--primary)' : 'white' }}
+                            onClick={() => setIsDiscountModalOpen(true)}
+                        >
+                            <Tag size={24} weight={overallDiscount > 0 ? "fill" : "regular"} />
+                        </button>
+                    )}
                 </div>
+                {overallDiscount > 0 && (
+                    <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
+                        Desconto aplicado: {formatCurrency(overallDiscount)}
+                    </div>
+                )}
             </div>
             
             <div className="header-split" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop: '1rem', backgroundColor: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: 'var(--radius-lg)' }}>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, position: 'relative' }}>
                     <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>Local da Compra Atual:</label>
-                    <select 
-                        className="form-control" 
-                        value={sessionPlaceId} 
-                        onChange={(e) => {
-                            if (e.target.value === 'NEW') setNewPlaceModalOpen(true);
-                            else setSessionPlaceId(e.target.value);
-                        }}
-                        style={{ background: 'transparent', border: 'none', padding: 0, fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer', appearance: 'none' }}
-                        disabled={cart.length > 0} // Lock place if cart has items
-                    >
-                        <option value="" disabled>Selecione um local...</option>
-                        {places.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        <option value="NEW" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>+ Adicionar Novo Local</option>
-                    </select>
+                    <div className="searchable-select-container">
+                        <input 
+                            type="text"
+                            className="form-control"
+                            placeholder="Buscar ou selecionar local..."
+                            value={isPlaceDropdownOpen ? placeSearch : (places.find(p => p.id === sessionPlaceId)?.name || '')}
+                            onFocus={() => { setIsPlaceDropdownOpen(true); setPlaceSearch(''); }}
+                            onBlur={() => setTimeout(() => setIsPlaceDropdownOpen(false), 200)}
+                            onChange={(e) => setPlaceSearch(e.target.value)}
+                            disabled={cart.length > 0}
+                            style={{ background: 'transparent', border: 'none', padding: 0, fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}
+                        />
+                        {isPlaceDropdownOpen && (
+                            <div className="searchable-select-dropdown">
+                                {places
+                                    .filter(p => p.name.toUpperCase().includes(placeSearch.toUpperCase()))
+                                    .slice()
+                                    .sort((a,b) => a.name.localeCompare(b.name))
+                                    .map(p => (
+                                        <div 
+                                            key={p.id} 
+                                            className="searchable-select-item"
+                                            onClick={() => { setSessionPlaceId(p.id); setPlaceSearch(p.name); setIsPlaceDropdownOpen(false); }}
+                                        >
+                                            {p.name}
+                                        </div>
+                                    ))
+                                }
+                                <div className="searchable-select-item new-item" onClick={() => { setNewPlaceModalOpen(true); setIsPlaceDropdownOpen(false); }}>
+                                    + Adicionar Novo Local
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <Storefront size={28} weight="duotone" color="var(--primary)" />
             </div>
@@ -342,7 +450,7 @@ export default function Home() {
                         <p>Adicione itens para começar a feira.</p>
                     </div>
                 ) : (
-                    cart.map(item => (
+                    cart.slice().sort((a,b) => a.productName.localeCompare(b.productName)).map(item => (
                         <div className="list-item" key={item.id}>
                             <div className="item-main">
                                 <span className="item-name">{item.productName}</span>
@@ -367,33 +475,62 @@ export default function Home() {
                 )}
             </div>
 
-            <button className="fab-secondary" onClick={() => {
-                if(places.length === 0) {
-                    alert('Cadastre pelo menos 1 local para importar notas fiscais.');
-                } else if (!sessionPlaceId) {
-                    alert('Por favor, selecione ou adicione o Local da Compra no topo da tela antes de digitalizar uma nota.');
-                } else setScannerOpen(true);
-            }}>
-                <QrCode weight="bold" />
-            </button>
+            <div className="fab-container">
+                <div className={`speed-dial-menu ${isSpeedDialOpen ? 'open' : ''}`}>
+                    {/* Backup Action */}
+                    <div className="speed-dial-item" onClick={() => { handleBackup(); setSpeedDialOpen(false); }}>
+                        <span>Backup Nuvem</span>
+                        <div className="speed-dial-btn" style={{ background: '#3b82f6' }}>
+                            {isBackingUp ? (
+                                <div className="spinner" style={{ width: '20px', height: '20px', border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                            ) : (
+                                <CloudArrowUp weight="bold" />
+                            )}
+                        </div>
+                    </div>
 
-            <button className="fab-backup" onClick={handleBackup} disabled={isBackingUp}>
-                {isBackingUp ? (
-                    <div className="spinner" style={{ width: '24px', height: '24px', border: '3px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                ) : (
-                    <CloudArrowUp weight="bold" />
-                )}
-            </button>
+                    {/* Scan Action */}
+                    <div className="speed-dial-item" onClick={() => {
+                        if(places.length === 0) {
+                            alert('Cadastre pelo menos 1 local para importar notas fiscais.');
+                        } else if (!sessionPlaceId) {
+                            alert('Por favor, selecione ou adicione o Local da Compra no topo da tela antes de digitalizar uma nota.');
+                        } else {
+                            setScannerOpen(true);
+                        }
+                        setSpeedDialOpen(false);
+                    }}>
+                        <span>Escanear Nota</span>
+                        <div className="speed-dial-btn" style={{ background: '#a855f7' }}>
+                            <QrCode weight="bold" />
+                        </div>
+                    </div>
 
-            <button className="fab" onClick={() => {
-                if(products.length === 0 || places.length === 0) {
-                    alert('Cadastre pelo menos 1 produto e 1 local para adicionar itens ao carrinho.');
-                } else if (!sessionPlaceId) {
-                    alert('Por favor, selecione ou adicione o Local da Compra no topo da tela antes de começar a feira.');
-                } else setModalOpen(true);
-            }}>
-                <Plus weight="bold" />
-            </button>
+                    {/* Add Item Action */}
+                    <div className="speed-dial-item" onClick={() => {
+                        if(products.length === 0 || places.length === 0) {
+                            alert('Cadastre pelo menos 1 produto e 1 local para adicionar itens ao carrinho.');
+                        } else if (!sessionPlaceId) {
+                            alert('Por favor, selecione ou adicione o Local da Compra no topo da tela antes de começar a feira.');
+                        } else {
+                            setModalOpen(true);
+                        }
+                        setSpeedDialOpen(false);
+                    }}>
+                        <span>Novo Item</span>
+                        <div className="speed-dial-btn" style={{ background: 'var(--primary)' }}>
+                            <Plus weight="bold" />
+                        </div>
+                    </div>
+                </div>
+
+                <button 
+                    className={`speed-dial-btn main-fab ${isSpeedDialOpen ? 'open' : ''}`} 
+                    onClick={() => setSpeedDialOpen(!isSpeedDialOpen)}
+                >
+                    <Plus weight="bold" />
+                </button>
+            </div>
             
             {cart.length > 0 && (
                 <button onClick={finishShopping} className="btn btn-primary btn-block" style={{ marginTop: '2rem' }}>
@@ -405,52 +542,130 @@ export default function Home() {
                 <form onSubmit={handleAddItem}>
                     <div className="form-group">
                         <label>Produto</label>
-                        <select className="form-control" required value={selectedProduct} onChange={handleProductChange}>
-                            <option value="" disabled>Selecione um produto...</option>
-                            {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}
-                            <option value="NEW" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>+ Adicionar Novo Produto</option>
-                        </select>
+                        <div className="searchable-select-container">
+                            <input 
+                                type="text"
+                                className="form-control"
+                                placeholder="Buscar produto..."
+                                value={isProductDropdownOpen ? productSearch : (products.find(p => p.id === selectedProduct)?.name || '')}
+                                onFocus={() => { setIsProductDropdownOpen(true); setProductSearch(''); }}
+                                onBlur={() => setTimeout(() => setIsProductDropdownOpen(false), 200)}
+                                onChange={(e) => setProductSearch(e.target.value)}
+                                required
+                            />
+                            {isProductDropdownOpen && (
+                                <div className="searchable-select-dropdown">
+                                    {products
+                                        .filter(p => p.name.toUpperCase().includes(productSearch.toUpperCase()))
+                                        .slice()
+                                        .sort((a,b) => a.name.localeCompare(b.name))
+                                        .map(p => (
+                                            <div 
+                                                key={p.id} 
+                                                className="searchable-select-item"
+                                                onClick={() => { 
+                                                    handleProductChange({ target: { value: p.id } }); 
+                                                    setProductSearch(p.name); 
+                                                    setIsProductDropdownOpen(false); 
+                                                }}
+                                            >
+                                                <span>{p.name}</span>
+                                                <span className="item-unit">{p.unit}</span>
+                                            </div>
+                                        ))
+                                    }
+                                    <div className="searchable-select-item new-item" onClick={() => { setNewProductModalOpen(true); setIsProductDropdownOpen(false); }}>
+                                        + Adicionar Novo Produto
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     
                     {insight && (
-                        <div className="ai-insight">
-                            <div className="ai-icon"><Sparkle weight="fill" /></div>
+                        <div className="ai-insight" style={{ 
+                            borderLeft: parseFloat(price) > insight.bestPrice ? '4px solid var(--danger)' : '4px solid var(--primary)',
+                            backgroundColor: parseFloat(price) > insight.bestPrice ? 'rgba(239, 68, 68, 0.05)' : 'rgba(16, 185, 129, 0.05)'
+                        }}>
+                            <div className="ai-icon">
+                                {parseFloat(price) > insight.bestPrice ? (
+                                    <Tag weight="fill" style={{ color: 'var(--danger)' }} />
+                                ) : (
+                                    <Sparkle weight="fill" />
+                                )}
+                            </div>
                             <div className="ai-text">
-                                <div className="ai-title">Dica Inteligente</div>
-                                <div className="ai-desc" dangerouslySetInnerHTML={{ __html: insight.message }}></div>
+                                <div className="ai-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>{parseFloat(price) > insight.bestPrice ? 'Alerta de Preço' : 'Análise de Economia'}</span>
+                                    {parseFloat(price) > insight.bestPrice && (
+                                        <span style={{ fontSize: '0.7rem', backgroundColor: 'var(--danger)', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>
+                                            +{((parseFloat(price) / insight.bestPrice - 1) * 100).toFixed(0)}% caro
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="ai-desc">
+                                    <span dangerouslySetInnerHTML={{ __html: insight.message }}></span>
+                                    {parseFloat(price) > insight.bestPrice && (
+                                        <div style={{ marginTop: '8px', fontSize: '0.85rem', color: 'var(--danger)', fontWeight: 600 }}>
+                                            ⚠️ Este item está bem mais caro que o normal.<br/>
+                                            Deseja jogar na Lista Inteligente para comprar depois no <b>{insight.bestPlace}</b>?
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
 
                     <div className="form-row-responsive" style={{ marginTop: '1rem' }}>
                         <div className="form-group flex-1">
-                            <label>Preço Unit. (R$)</label>
-                            <input type="number" step="0.01" min="0" className="form-control" required value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" />
-                        </div>
-                        <div className="form-group flex-1">
-                            <label>Quantidade</label>
+                            <label>{selectedProductUnit === 'kg' ? 'Peso (kg)' : 'Quantidade'}</label>
                             <div className="qty-picker">
                                 <button type="button" className="qty-btn" 
-                                    onClick={() => setQty(prev => Math.max(1, prev - 1))}>
+                                    onClick={() => setQty(prev => Math.max(selectedProductUnit === 'kg' ? 0.001 : 1, prev - (selectedProductUnit === 'kg' ? 0.1 : 1)))}>
                                      <span>−</span>
                                 </button>
-                                <input type="number" step="1" min="1" className="form-control qty-input" required value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} />
+                                <input 
+                                    type={selectedProductUnit === 'kg' ? "text" : "number"}
+                                    inputMode={selectedProductUnit === 'kg' ? "numeric" : "decimal"}
+                                    step={selectedProductUnit === 'kg' ? "0.001" : "1"} 
+                                    min={selectedProductUnit === 'kg' ? "0.001" : "1"} 
+                                    className="form-control qty-input" 
+                                    required 
+                                    value={selectedProductUnit === 'kg' ? qty.toFixed(3) : qty} 
+                                    onChange={e => handleQuantityChange(e.target.value)} 
+                                />
                                 <button type="button" className="qty-btn" 
-                                    onClick={() => setQty(prev => prev + 1)}>
+                                    onClick={() => setQty(prev => prev + (selectedProductUnit === 'kg' ? 0.1 : 1))}>
                                     <span>+</span>
                                 </button>
                             </div>
                         </div>
+                        <div className="form-group" style={{ flex: 1.5 }}>
+                            <label>{selectedProductUnit === 'kg' ? 'Preço do kg (R$)' : 'Preço Unit. (R$)'}</label>
+                            <input type="number" step="0.01" min="0" className="form-control" required value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" />
+                        </div>
                     </div>
-                    
+
                     <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Total do Item</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{selectedProductUnit === 'kg' ? 'Preço que você pegou' : 'Total do Item'}</div>
                         <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--primary)' }}>
                             {formatCurrency((parseFloat(price) || 0) * (parseFloat(qty) || 0))}
                         </div>
                     </div>
 
-                    <button type="submit" className="btn btn-primary btn-block">Adicionar Item</button>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button type="submit" className="btn btn-primary flex-1">Adicionar Item</button>
+                        {insight && insight.bestPrice < parseFloat(price) && (
+                            <button 
+                                type="button" 
+                                className="btn btn-secondary flex-1" 
+                                style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)' }}
+                                onClick={handleSaveToList}
+                            >
+                                Guardar p/ Outro Local
+                            </button>
+                        )}
+                    </div>
                 </form>
             </Modal>
 
@@ -639,6 +854,57 @@ export default function Home() {
                         Importar {scrapedItems?.length} Itens
                     </button>
                 </div>
+            </Modal>
+            {/* Modal for Overall Discount */}
+            <Modal isOpen={isDiscountModalOpen} onClose={() => setIsDiscountModalOpen(false)} title="Desconto da Feira">
+                <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Subtotal dos Itens</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatCurrency(totalCart)}</div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                    <label>Valor Total Pago (R$)</label>
+                    <input 
+                        type="number" 
+                        step="0.01" 
+                        className="form-control" 
+                        value={isDiscountModalOpen && paidAmount === '' ? (totalCart - overallDiscount).toFixed(2) : paidAmount}
+                        onChange={e => {
+                            const val = e.target.value;
+                            setPaidAmount(val);
+                            const numVal = parseFloat(val);
+                            if (!isNaN(numVal)) {
+                                const diff = totalCart - numVal;
+                                setOverallDiscount(diff > 0 ? diff : 0);
+                            }
+                        }}
+                        placeholder="Quanto você pagou no total?"
+                    />
+                    <small style={{ color: 'var(--text-tertiary)', display: 'block', marginTop: '4px' }}>
+                        Ajuste o valor final pago para calcular o desconto automaticamente.
+                    </small>
+                </div>
+
+                <div className="form-group">
+                    <label>Ou informe o Desconto Direto (R$)</label>
+                    <input 
+                        type="number" 
+                        step="0.01" 
+                        min="0" 
+                        className="form-control" 
+                        value={overallDiscount} 
+                        onChange={e => {
+                            const disc = parseFloat(e.target.value) || 0;
+                            setOverallDiscount(disc);
+                            setPaidAmount((totalCart - disc).toFixed(2));
+                        }} 
+                        placeholder="0.00" 
+                    />
+                </div>
+                
+                <button className="btn btn-primary btn-block" style={{ marginTop: '1.5rem' }} onClick={() => { setIsDiscountModalOpen(false); setPaidAmount(''); }}>
+                    Confirmar Valores
+                </button>
             </Modal>
         </div>
     );

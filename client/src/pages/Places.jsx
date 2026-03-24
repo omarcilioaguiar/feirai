@@ -5,6 +5,7 @@ import Modal from '../components/Modal';
 
 export default function Places() {
     const [places, setPlaces] = useState([]);
+    const [listSearch, setListSearch] = useState('');
     const [isModalOpen, setModalOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(null); // stores the ID of the place being edited
     const [formData, setFormData] = useState({ name: '', location: '', lat: null, lng: null });
@@ -129,6 +130,15 @@ export default function Places() {
                     <Plus weight="bold" />
                 </button>
             </div>
+            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                <input 
+                    type="text" 
+                    className="form-control" 
+                    placeholder="Pesquisar local..." 
+                    value={listSearch}
+                    onChange={(e) => setListSearch(e.target.value)}
+                />
+            </div>
             
             <div id="places-list">
                 {places.length === 0 ? (
@@ -136,7 +146,11 @@ export default function Places() {
                         <p>Nenhum supermercado cadastrado.</p>
                     </div>
                 ) : (
-                    places.map(place => (
+                    places
+                        .filter(p => p.name.toUpperCase().includes(listSearch.toUpperCase()))
+                        .slice()
+                        .sort((a,b) => a.name.localeCompare(b.name))
+                        .map(place => (
                         <div className="card" key={place.id} style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <strong>{place.name}</strong>
