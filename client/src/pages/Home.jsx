@@ -1,10 +1,10 @@
-import { ShoppingCartSimple, Trash, Storefront, Sparkle, Plus, CheckCircle, QrCode, CloudArrowUp } from '@phosphor-icons/react';
+import { ShoppingCartSimple, Trash, Storefront, Sparkle, Plus, CheckCircle, QrCode, CloudArrowUp, Selection, Keyboard, PencilSimple } from '@phosphor-icons/react';
 import { useState, useEffect } from 'react';
 import api from '../api';
 import Modal from '../components/Modal';
 
 import GooglePlaceAutocomplete from '../components/GooglePlaceAutocomplete';
-import QrScanner from '../components/QrScanner';
+
 
 const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -19,12 +19,16 @@ export default function Home() {
     const [isNewPlaceModalOpen, setNewPlaceModalOpen] = useState(false);
     const [newPlaceData, setNewPlaceData] = useState({ name: '', location: '', lat: null, lng: null });
 
+    const [isNewProductModalOpen, setNewProductModalOpen] = useState(false);
+    const [newProductData, setNewProductData] = useState({ name: '', unit: 'un', category: 'Geral' });
+
     // Item Form State
     const [selectedProduct, setSelectedProduct] = useState('');
     const [price, setPrice] = useState('');
     const [qty, setQty] = useState(1);
     const [insight, setInsight] = useState(null);
     const [userLocation, setUserLocation] = useState(null);
+    const [editingItemId, setEditingItemId] = useState(null);
 
     // NFC-e Scanner State
     const [isScannerOpen, setScannerOpen] = useState(false);
@@ -132,6 +136,10 @@ export default function Home() {
 
     const handleProductChange = (e) => {
         const pid = e.target.value;
+        if (pid === 'NEW') {
+            setNewProductModalOpen(true);
+            return;
+        }
         setSelectedProduct(pid);
         fetchInsight(pid);
     };
@@ -145,26 +153,38 @@ export default function Home() {
         const numPrice = parseFloat(price) || 0;
         const numQty = parseFloat(qty) || 1;
 
-        setCart([
-            ...cart, 
-            { 
-                id: Math.random().toString(), 
-                productId: product.id, 
-                placeId: place.id, 
-                productName: product.name,
-                placeName: place.name,
-                unit: product.unit,
-                price: numPrice, 
-                qty: numQty, 
-                total: numPrice * numQty 
-            }
-        ]);
+        const newItem = { 
+            id: editingItemId || Math.random().toString(), 
+            productId: product.id, 
+            placeId: place.id, 
+            productName: product.name,
+            placeName: place.name,
+            unit: product.unit,
+            price: numPrice, 
+            qty: numQty, 
+            total: numPrice * numQty 
+        };
+
+        if (editingItemId) {
+            setCart(cart.map(item => item.id === editingItemId ? newItem : item));
+        } else {
+            setCart([...cart, newItem]);
+        }
         
         setModalOpen(false);
+        setEditingItemId(null);
         setSelectedProduct('');
         setPrice('');
         setQty(1);
         setInsight(null);
+    };
+
+    const editCartItem = (item) => {
+        setEditingItemId(item.id);
+        setSelectedProduct(item.productId);
+        setPrice(item.price);
+        setQty(item.qty);
+        setModalOpen(true);
     };
 
     const handleCreateNewPlace = async (e) => {
@@ -181,36 +201,70 @@ export default function Home() {
         }
     };
 
-    const handleScanResult = async (url) => {
-        setScannerOpen(false);
-        setIsParsingReceipt(true);
+    const handleCreateNewProduct = async (e) => {
+        e.preventDefault();
         try {
-            const res = await api.post('/receipts/parse', { url });
-            setScrapedItems(res.data.items);
-            // res.data.placeName is also available, but we use sessionPlaceId as required by user
+            const res = await api.post('/products', newProductData);
+            setProducts([...products, res.data]);
+            setSelectedProduct(res.data.id);
+            setNewProductModalOpen(false);
+            setNewProductData({ name: '', unit: 'un', category: 'Geral' });
         } catch (err) {
             console.error(err);
-            alert("Erro ao ler nota fiscal. Verifique se a nota é compatível ou tente novamente.");
+            alert("Erro ao criar novo produto");
+        }
+    };
+
+    const handleOcrAnalysis = async (file) => {
+        if (!file) return;
+        setIsParsingReceipt(true);
+        const formData = new FormData();
+        formData.append('image', file);
+        try {
+            const res = await api.post('/receipts/ocr', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            setScrapedItems(res.data.items);
+            setScannerOpen(false);
+        } catch (err) {
+            console.error(err);
+            alert(err.response?.data?.error || "Erro ao analisar a foto.");
         } finally {
             setIsParsingReceipt(false);
         }
     };
 
+
     const confirmReceiptImport = async () => {
-        if (!scrapedItems || !sessionPlaceId) return;
+        if (!scrapedItems) return;
         try {
-            await api.post('/sessions/import', {
-                placeId: sessionPlaceId,
+            // Step 1: Tell backend to map/create products and give us final IDs
+            const res = await api.post('/sessions/import', {
                 items: scrapedItems
             });
-            alert("Feira importada com sucesso!");
+            
+            // Step 2: Add these processed items to our CURRENT cart
+            const newCartItems = res.data.processedItems.map(item => ({
+                id: Math.random().toString(),
+                productId: item.productId,
+                placeId: sessionPlaceId,
+                productName: item.suggestedProductName || item.name,
+                placeName: places.find(p => p.id === sessionPlaceId)?.name || 'Local',
+                unit: item.unit || 'un',
+                price: item.price,
+                qty: item.qty,
+                total: item.price * item.qty
+            }));
+
+            setCart([...cart, ...newCartItems]);
             setScrapedItems(null);
-            // Optionally refresh history or UI if needed
+            alert(`${newCartItems.length} itens adicionados ao seu carrinho!`);
         } catch (err) {
             console.error(err);
             alert("Erro ao importar a nota fiscal.");
         }
     };
+
 
     const handleBackup = async () => {
         setIsBackingUp(true);
@@ -300,9 +354,14 @@ export default function Home() {
                                 <div className="item-price">{formatCurrency(item.total)}</div>
                                 <div className="item-qty">{Math.round(item.qty)} {item.unit} x {formatCurrency(item.price)}</div>
                             </div>
-                            <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => removeCartItem(item.id)}>
-                                <Trash weight="fill" />
-                            </button>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button className="icon-btn" style={{ color: 'var(--primary)' }} onClick={() => editCartItem(item)}>
+                                    <PencilSimple weight="fill" />
+                                </button>
+                                <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => removeCartItem(item.id)}>
+                                    <Trash weight="fill" />
+                                </button>
+                            </div>
                         </div>
                     ))
                 )}
@@ -342,13 +401,14 @@ export default function Home() {
                 </button>
             )}
 
-            <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title="Adicionar à Feira">
+            <Modal isOpen={isModalOpen} onClose={() => { setModalOpen(false); setEditingItemId(null); }} title={editingItemId ? "Editar Item" : "Adicionar à Feira"}>
                 <form onSubmit={handleAddItem}>
                     <div className="form-group">
                         <label>Produto</label>
                         <select className="form-control" required value={selectedProduct} onChange={handleProductChange}>
                             <option value="" disabled>Selecione um produto...</option>
                             {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}
+                            <option value="NEW" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>+ Adicionar Novo Produto</option>
                         </select>
                     </div>
                     
@@ -425,16 +485,76 @@ export default function Home() {
                 </form>
             </Modal>
 
-            {/* QR Scanner Modal */}
-            <Modal isOpen={isScannerOpen} onClose={() => setScannerOpen(false)} title="Escanear NFC-e">
-                <p style={{ textAlign: 'center', marginBottom: '1rem', color: 'var(--text-secondary)' }}>Aponte a câmera para o QR Code da nota fiscal eletrônica.</p>
-                {isScannerOpen && (
-                    <QrScanner 
-                        onScan={handleScanResult} 
-                        onError={(err) => console.log('QR Scan:', err)} 
-                        onClose={() => setScannerOpen(false)} 
-                    />
-                )}
+            {/* Modal for Creating New Product Inline */}
+            <Modal isOpen={isNewProductModalOpen} onClose={() => setNewProductModalOpen(false)} title="Adicionar Novo Produto">
+                <form onSubmit={handleCreateNewProduct}>
+                    <div className="form-group">
+                        <label>Nome do Produto</label>
+                        <input type="text" className="form-control" required style={{ textTransform: 'uppercase' }} value={newProductData.name} onChange={e => setNewProductData({ ...newProductData, name: e.target.value.toUpperCase() })} placeholder="Ex: MAÇÃ FUJI" />
+                    </div>
+                    <div className="form-group">
+                        <label>Unidade de Medida</label>
+                        <select className="form-control" required value={newProductData.unit} onChange={e => setNewProductData({ ...newProductData, unit: e.target.value })}>
+                            <option value="un">un</option>
+                            <option value="kg">kg</option>
+                            <option value="pc">pc</option>
+                            <option value="lt">lt</option>
+                            <option value="dz">dz</option>
+                            <option value="cx">cx</option>
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label>Categoria</label>
+                        <select className="form-control" required value={newProductData.category} onChange={e => setNewProductData({ ...newProductData, category: e.target.value })}>
+                            <option value="Geral">Geral</option>
+                            <option value="Hortifruti">Hortifruti</option>
+                            <option value="Carnes">Carnes</option>
+                            <option value="Laticínios">Laticínios</option>
+                            <option value="Padaria">Padaria</option>
+                            <option value="Limpeza">Limpeza</option>
+                            <option value="Higiene">Higiene</option>
+                            <option value="Bebidas">Bebidas</option>
+                        </select>
+                    </div>
+                    <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: '1rem' }}>Salvar Produto</button>
+                </form>
+            </Modal>
+
+            <Modal isOpen={isScannerOpen} onClose={() => setScannerOpen(false)} title="Analisar Nota via Foto">
+                <div style={{ padding: '1rem', textAlign: 'center' }}>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', fontSize: '0.9rem' }}>
+                        Tire uma foto nítida da sua nota fiscal. Nossa IA irá identificar os produtos e preços automaticamente.
+                    </p>
+                    
+                    <label style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        padding: '3rem 2rem', 
+                        border: '3px dashed var(--primary)', 
+                        borderRadius: '20px',
+                        background: 'rgba(var(--primary-rgb), 0.05)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                    }} className="hover-scale">
+                        <Sparkle size={64} color="var(--primary)" weight="duotone" />
+                        <span style={{ marginTop: '1.5rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+                            Tirar Foto ou Abrir Galeria
+                        </span>
+                        <input 
+                            type="file" 
+                            accept="image/*" 
+                            capture="environment"
+                            style={{ display: 'none' }} 
+                            onChange={(e) => handleOcrAnalysis(e.target.files[0])} 
+                        />
+                    </label>
+
+                    <p style={{ marginTop: '2rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        Dica: Enquadre bem a lista de produtos para melhor precisão.
+                    </p>
+                </div>
             </Modal>
             
             {/* Loading Overlay for Parsing */}
@@ -452,22 +572,62 @@ export default function Home() {
                     Os produtos marcados como <strong>Novo (Genérico)</strong> serão cadastrados automaticamente no sistema. Demos o nosso melhor para associar itens existentes!
                 </div>
                 
-                <div style={{ maxHeight: 'max(40vh, 300px)', overflowY: 'auto', marginBottom: '1rem', paddingRight: '0.5rem' }}>
+                <div style={{ maxHeight: 'max(40vh, 400px)', overflowY: 'auto', marginBottom: '1rem', paddingRight: '0.5rem' }}>
                     {scrapedItems && scrapedItems.map((item, idx) => (
-                        <div className="card" key={idx} style={{ marginBottom: '0.5rem', border: item.isNew ? '1px dashed var(--primary)' : '1px solid var(--border)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div>
-                                    <strong style={{ fontSize: '1rem', display: 'block', color: item.isNew ? 'var(--primary)' : 'var(--text-primary)' }}>
-                                        {item.suggestedProductName} {item.isNew && <span style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'rgba(16,185,129,0.15)', borderRadius: '4px', verticalAlign: 'middle', marginLeft: '6px' }}>NOVO (Genérico)</span>}
-                                    </strong>
-                                    <small style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>Lido na nota: {item.name}</small>
+                        <div className="card" key={idx} style={{ marginBottom: '1rem', border: item.isNew ? '1px dashed var(--primary)' : '1px solid var(--border)', padding: '12px' }}>
+                            <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <input 
+                                        type="text" 
+                                        className="form-control" 
+                                        style={{ flex: 1, fontWeight: 'bold', fontSize: '0.9rem', textTransform: 'uppercase' }}
+                                        value={item.suggestedProductName}
+                                        onChange={(e) => {
+                                            const newItems = [...scrapedItems];
+                                            newItems[idx].suggestedProductName = e.target.value.toUpperCase();
+                                            setScrapedItems(newItems);
+                                        }}
+                                    />
+                                    <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => setScrapedItems(scrapedItems.filter((_, i) => i !== idx))}>
+                                        <Trash />
+                                    </button>
                                 </div>
-                                <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontWeight: 'bold' }}>{formatCurrency(item.total)}</div>
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                        {item.qty} {item.unit} x {formatCurrency(item.price)}
+                                
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Qtd</label>
+                                        <input 
+                                            type="number" 
+                                            className="form-control" 
+                                            value={item.qty}
+                                            onChange={(e) => {
+                                                const newItems = [...scrapedItems];
+                                                newItems[idx].qty = parseFloat(e.target.value) || 0;
+                                                newItems[idx].total = newItems[idx].qty * newItems[idx].price;
+                                                setScrapedItems(newItems);
+                                            }}
+                                        />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Preço (R$)</label>
+                                        <input 
+                                            type="number" 
+                                            className="form-control" 
+                                            value={item.price}
+                                            onChange={(e) => {
+                                                const newItems = [...scrapedItems];
+                                                newItems[idx].price = parseFloat(e.target.value) || 0;
+                                                newItems[idx].total = newItems[idx].qty * newItems[idx].price;
+                                                setScrapedItems(newItems);
+                                            }}
+                                        />
+                                    </div>
+                                    <div style={{ flex: 1, textAlign: 'right' }}>
+                                        <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', display: 'block' }}>Total</label>
+                                        <div style={{ fontWeight: 'bold', padding: '6px 0' }}>{formatCurrency(item.total)}</div>
                                     </div>
                                 </div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Texto original: {item.name}</div>
                             </div>
                         </div>
                     ))}

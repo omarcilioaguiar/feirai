@@ -92,7 +92,7 @@ export default function Products() {
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
                         <label>Nome do Produto</label>
-                        <input type="text" className="form-control" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Ex: Arroz Branco" />
+                        <input type="text" className="form-control" required style={{ textTransform: 'uppercase' }} value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value.toUpperCase() })} placeholder="Ex: ARROZ BRANCO" />
                     </div>
                     <div className="form-group">
                         <label>Unidade de Medida</label>

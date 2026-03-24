@@ -23,8 +23,7 @@ services:
       dockerfile: Dockerfile
     container_name: feirai_frontend
     ports:
-      - "80:80"
-      - "5173:80" # Mapping 5173 for backward compatibility
+      - "3010:80"
     depends_on:
       - backend
     restart: unless-stopped

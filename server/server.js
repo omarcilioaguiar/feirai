@@ -3,6 +3,8 @@ const cors = require('cors');
 const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
+const Tesseract = require('tesseract.js');
 const { dbAll, dbRun, dbGet } = require('./db');
 const { v4: uuidv4 } = require('uuid'); // fallback to simple generation if no uuid library
 const app = express();
@@ -26,9 +28,10 @@ app.get('/api/products', async (req, res) => {
 app.put('/api/products/:id', async (req, res) => {
     const { id } = req.params;
     const { name, category = 'Geral', unit = 'un', brand = null } = req.body;
+    const upperName = (name || '').toUpperCase();
     try {
-        await dbRun('UPDATE Product SET name = ?, category = ?, unit = ?, brand = ? WHERE id = ?', [name, category, unit, brand, id]);
-        res.json({ success: true });
+        await dbRun('UPDATE Product SET name = ?, category = ?, unit = ?, brand = ? WHERE id = ?', [upperName, category, unit, brand, id]);
+        res.json({ success: true, name: upperName });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -45,10 +48,11 @@ app.delete('/api/products/:id', async (req, res) => {
 });
 app.post('/api/products', async (req, res) => {
     const { name, category = 'Geral', unit = 'un', brand = null } = req.body;
+    const upperName = (name || '').toUpperCase();
     const id = generateId();
     try {
-        await dbRun('INSERT INTO Product (id, name, category, unit, brand) VALUES (?, ?, ?, ?, ?)', [id, name, category, unit, brand]);
-        res.json({ id, name, category, unit, brand });
+        await dbRun('INSERT INTO Product (id, name, category, unit, brand) VALUES (?, ?, ?, ?, ?)', [id, upperName, category, unit, brand]);
+        res.json({ id, name: upperName, category, unit, brand });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -131,60 +135,112 @@ app.post('/api/sessions', async (req, res) => {
     }
 });
 
-// --- QR Code NFC-e Parsers ---
-app.post('/api/receipts/parse', async (req, res) => {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: 'URL is required' });
+app.get('/api/sessions/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const run = await dbGet('SELECT * FROM ShoppingRun WHERE id = ?', [id]);
+        if (!run) return res.status(404).json({ error: 'Session not found' });
+        
+        const items = await dbAll(`
+            SELECT i.*, p.name as productName, p.unit, pl.name as placeName
+            FROM ShoppingItem i
+            JOIN Product p ON i.product_id = p.id
+            JOIN Place pl ON i.place_id = pl.id
+            WHERE i.run_id = ?
+        `, [id]);
+        
+        res.json({ ...run, items });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.put('/api/sessions/:id', async (req, res) => {
+    const { id } = req.params;
+    const { total, items, date } = req.body;
+    try {
+        await dbRun('UPDATE ShoppingRun SET total_amount = ?, date = ? WHERE id = ?', [total, date, id]);
+        
+        // Simpler to delete and re-insert items for the session
+        await dbRun('DELETE FROM ShoppingItem WHERE run_id = ?', [id]);
+        for (const item of items) {
+            const itemId = generateId();
+            await dbRun(
+                'INSERT INTO ShoppingItem (id, run_id, product_id, place_id, price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
+                [itemId, id, item.productId, item.placeId, item.price, item.quantity]
+            );
+        }
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- AI Receipt Analysis (OCR) ---
+const upload = multer({ dest: '/tmp/' });
+
+const NOISE_WORDS = ['TOTAL', 'PAGAR', 'VALOR', 'DINHEIRO', 'CARTAO', 'TROCO', 'DESCONTO', 'TRIBUTOS', 'CARTEIRA', 'VOLTE', 'SEMPRE', 'ICMS', 'CHAVE', 'NFC-e', 'NFE'];
+
+const parseReceiptText = (text) => {
+    const items = [];
+    const lines = text.split('\n');
+    
+    // Pattern: [NAME] [QTY] [UNIT] [PRICE] [TOTAL]
+    const itemRegex = /^(.+?)\s+(\d+[\d,.]*)\s+(UN|KG|PC|LT|DZ|FD|CX|UNID|G|MG|ML)\b\b.*?(\d+[\d,.]*)$/i;
+    
+    for (const line of lines) {
+        const cleanLine = line.trim().replace(/\s+/g, ' ');
+        // Check for noise
+        const isNoise = NOISE_WORDS.some(word => cleanLine.toUpperCase().includes(word));
+        if (isNoise) continue;
+
+        const match = cleanLine.match(itemRegex);
+        if (match) {
+            const name = match[1].trim().toUpperCase();
+            const qty = parseFloat(match[2].replace(',', '.'));
+            const unit = match[3].toLowerCase();
+            const price = parseFloat(match[4].replace(',', '.'));
+            if (!isNaN(qty) && !isNaN(price)) {
+                items.push({ name, qty, unit, price, total: qty * price });
+            }
+        } else {
+            // Fallback for lines like "PRODUTO 10,00"
+            const priceMatches = cleanLine.match(/\d+,\d{2}$/);
+            if (priceMatches && cleanLine.length > 5) {
+                const price = parseFloat(priceMatches[0].replace(',', '.'));
+                const name = cleanLine.replace(/[0-9,]+|KG|UN|PC|CX/gi, '').trim().toUpperCase();
+                if (name.length > 3) {
+                    items.push({ name, qty: 1, unit: 'un', price, total: price });
+                }
+            }
+        }
+    }
+    return items;
+};
+
+app.post('/api/receipts/ocr', upload.single('image'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Nenhuma foto enviada para análise.' });
     
     try {
-        const response = await fetch(url);
-        const html = await response.text();
-        const $ = cheerio.load(html);
+        console.log(`[AI-Analysis] Processando foto: ${req.file.path}`);
+        const result = await Tesseract.recognize(req.file.path, 'por');
+        const text = result.data.text;
+        fs.unlinkSync(req.file.path);
+
+        const items = parseReceiptText(text);
         
-        let placeName = $('#u20').text().trim() || $('.txtTopo').first().text().trim() || 'Supermercado (Via QR)';
-        
-        const items = [];
-        $('#tabResult tr').each((i, el) => {
-            const name = $(el).find('.txtTit').text().trim();
-            if (!name) return;
-            
-            let qtyText = $(el).find('span:contains("Qtde")').text() || $(el).find('.Rqtd').text() || '1';
-            let qty = parseFloat(qtyText.replace(/[^\d,.]/g, '').replace(',', '.')) || 1;
-            
-            let unText = $(el).find('span:contains("UN:")').text() || $(el).find('.RUN').text() || 'un';
-            let unit = unText.replace('UN:', '').trim().toLowerCase() || 'un';
-            
-            let priceText = $(el).find('span:contains("Vl. Unit.:")').text() || $(el).find('.RvlUnit').text() || '0';
-            let val = parseFloat(priceText.replace(/[^\d,.]/g, '').replace(',', '.')) || 0;
-            if (val === 0) {
-                 let tot = parseFloat($(el).find('.valor').text().replace(/[^\d,.]/g, '').replace(',', '.')) || 0;
-                 val = tot / qty;
-            }
-            
-            items.push({ name, qty, unit, price: val, total: val * qty });
-        });
-        
-        // "AI" similarity matching to map scraped items to existing items
         const existingProducts = await dbAll('SELECT * FROM Product');
-        
         const findSimilarProduct = (scrapedName) => {
             const words = scrapedName.toLowerCase().split(' ').filter(w => w.length > 2);
-            let bestMatch = null;
-            let maxScore = 0;
-            
+            let bestMatch = null; let maxScore = 0;
             for (const p of existingProducts) {
                 let score = 0;
-                for (const w of words) {
-                    if (p.name.toLowerCase().includes(w)) score++;
-                }
-                if (score > maxScore) {
-                    maxScore = score;
-                    bestMatch = p;
-                }
+                for (const w of words) if (p.name.toLowerCase().includes(w)) score++;
+                if (score > maxScore) { maxScore = score; bestMatch = p; }
             }
             return maxScore > 0 ? bestMatch : null;
         };
-        
+
         const mappedItems = items.map(item => {
             const match = findSimilarProduct(item.name);
             return {
@@ -195,51 +251,45 @@ app.post('/api/receipts/parse', async (req, res) => {
             };
         });
         
-        res.json({ placeName, items: mappedItems });
-    } catch (error) {
-        console.error('NFC-e Parse Error:', error);
-        res.status(500).json({ error: 'Failed to parse receipt' });
+        res.json({ placeName: 'Importado via Foto', items: mappedItems });
+    } catch (err) {
+        console.error("AI Analysis Error:", err);
+        res.status(500).json({ error: 'Erro ao analisar imagem: ' + err.message });
     }
 });
 
+
 app.post('/api/sessions/import', async (req, res) => {
-    const { placeId, placeName, items } = req.body;
+    const { items } = req.body;
     try {
-        let finalPlaceId = placeId;
-        if (!finalPlaceId && placeName) {
-            finalPlaceId = generateId();
-            await dbRun('INSERT INTO Place (id, name, location, lat, lng) VALUES (?, ?, ?, null, null)', [finalPlaceId, placeName, 'Importado via NFC-e']);
-        }
-        
-        const runId = generateId();
-        const date = new Date().toISOString();
-        let total = 0;
-        
+        const processedItems = [];
         for (const item of items) {
             let prodId = item.suggestedProductId;
-            
+            const upperName = (item.suggestedProductName || item.name || '').toUpperCase();
             if (!prodId || item.isNew) {
                 prodId = generateId();
                 await dbRun('INSERT INTO Product (id, name, category, unit, brand) VALUES (?, ?, ?, ?, ?)', 
-                    [prodId, item.suggestedProductName || item.name, 'Geral', item.unit || 'un', null]);
+                    [prodId, upperName, 'Geral', item.unit || 'un', null]);
             }
-            
-            const itemTotal = item.qty * item.price;
-            total += itemTotal;
-            
-            await dbRun(
-                'INSERT INTO ShoppingItem (id, run_id, product_id, place_id, price, quantity) VALUES (?, ?, ?, ?, ?, ?)',
-                [generateId(), runId, prodId, finalPlaceId, item.price, item.qty]
-            );
+            processedItems.push({ ...item, productId: prodId, suggestedProductName: upperName });
         }
-        
-        await dbRun('INSERT INTO ShoppingRun (id, date, total_amount) VALUES (?, ?, ?)', [runId, date, total]);
-        
-        res.json({ success: true, runId });
+        res.json({ success: true, processedItems });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
+
+app.delete('/api/sessions/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await dbRun('DELETE FROM ShoppingItem WHERE run_id = ?', [id]);
+        await dbRun('DELETE FROM ShoppingRun WHERE id = ?', [id]);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 
 // --- Maps API Proxy ---
 app.get('/api/maps/autocomplete', async (req, res) => {
