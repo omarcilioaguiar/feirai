@@ -75,6 +75,18 @@ Abra o endereço indicado (ex: `http://localhost:5173`) no seu navegador ou celu
 
 ---
 
+## 📈 Notas de Melhorias (Changelog)
+
+### [24/03/2026] - Inteligência de Compra & Otimização de Roteiro
+*   **🛒 Lista Inteligente**: Novo sistema de planejamento que agrupa automaticamente os itens pelo melhor preço histórico por supermercado.
+*   **⚡ Exportação p/ Feira**: Inicie uma compra a partir da lista planejada com um clique; o sistema configura o local e carrega os preços sugeridos instantaneamente.
+*   **📊 Tendências de Consumo**: Dashboard de relatórios agora indica o melhor dia da semana para comprar cada item com base em IA histórica.
+*   **🧠 Insights de Economia**: Relatório proativo que mostra onde estão as maiores oportunidades de economia por produto.
+*   **📱 UI Responsiva & Refinada**: Redesign completo dos modais de edição e histórico para perfeita visualização em dispositivos móveis.
+*   **⚙️ Estabilidade & Logs**: Implementação de sistema fail-safe para carregamento de dados e logs de erro automatizados.
+
+---
+
 ## 📝 Licença
 Este projeto foi desenvolvido como um MVP inteligente para gestão financeira doméstica. Sinta-se à vontade para expandir!
 
