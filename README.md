@@ -38,10 +38,13 @@ Para que as funcionalidades de busca de endereços e geolocalização funcionem,
     *   **Custo**: Geralmente é **GRÁTIS** para uso pessoal. O Google oferece um crédito recorrente de **$200 dólares/mês**. Você só pagará algo se fizer milhares de buscas por dia.
 
 ### Onde colocar a chave no projeto:
-Abra o arquivo `/client/index.html` e substitua no script:
-```html
-<script src="https://maps.googleapis.com/maps/api/js?key=SUA_CHAVE_AQUI&libraries=places"></script>
+Nós usamos um proxy no servidor para que sua chave nunca fique visível para o usuário final.
+1.  Na raíz do projeto, crie um arquivo chamado `.env` (ou copie o `.env.example`).
+2.  Preencha com sua chave:
+```env
+GOOGLE_MAPS_API_KEY=SUA_CHAVE_AQUI
 ```
+3.  Reinicie o Docker: `docker-compose up -d --build`.
 
 ---
 

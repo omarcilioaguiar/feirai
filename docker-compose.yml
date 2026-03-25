@@ -12,9 +12,9 @@ services:
       - ./server/feirai.sqlite:/app/feirai.sqlite
       - /mnt/d/Nuvem/Dropbox/Backups/apps/feirai:/app/backups
     environment:
-      - DB_PATH=/app/feirai.sqlite
-      - NODE_ENV=production
-      - GOOGLE_MAPS_API_KEY=AIzaSyD5aeM5GoOJl8jisVo5AZjzW3ZbovFHluo
+      - DB_PATH=${DB_PATH:-/app/feirai.sqlite}
+      - NODE_ENV=${NODE_ENV:-production}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
     restart: unless-stopped
 
   frontend:
