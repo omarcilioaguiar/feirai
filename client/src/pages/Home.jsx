@@ -413,18 +413,24 @@ export default function Home() {
     const selectedProductUnit = products.find(p => p.id === selectedProduct)?.unit;
 
     const resumeSession = (session) => {
-        setCart(session.items.map(i => ({
-            id: i.id,
-            productId: i.product_id,
-            productName: i.productName,
-            price: i.price,
-            qty: i.quantity,
-            discount: i.discount,
-            shoppingListId: i.shopping_list_id,
-            unit: i.unit
-        })));
+        setCart(session.items.map(i => {
+            const numPrice = Number(i.price || 0);
+            const numQty = Number(i.quantity || 0);
+            const numDisc = Number(i.discount || 0);
+            return {
+                id: i.id,
+                productId: i.product_id,
+                productName: i.productName,
+                price: numPrice,
+                qty: numQty,
+                discount: numDisc,
+                total: (numPrice * numQty) - numDisc,
+                shoppingListId: i.shopping_list_id,
+                unit: i.unit
+            };
+        }));
         setSessionPlaceId(session.place_id || '');
-        setOverallDiscount(session.discount || 0);
+        setOverallDiscount(Number(session.discount || 0));
         setOpenSessions(prev => prev.filter(s => s.id !== session.id));
     };
 
