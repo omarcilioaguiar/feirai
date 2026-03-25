@@ -97,6 +97,24 @@ Abra o endereço indicado (ex: `http://localhost:5173`) no seu navegador ou celu
 *   **📱 Roadmap Mobile**: Lançamento da campanha "APP EM BREVE" com banner interativo na interface, preparando o público para a versão comercial.
 *   **🗺️ Mapeamento Arquitetural**: Documentação técnica completa das rotas e esquemas para facilitar futuras integrações.
 
+### [25/03/2026] - Sincronização em Nuvem (v1.2)
+*   **🔄 Sync Nuvem (Smart Sync)**: Implementação de lógica de sincronização bidirecional inteligente. O sistema agora compara o banco local com o backup mais recente e decide automaticamente se deve puxar os dados da nuvem ou enviar os locais.
+*   **📱 Retomada Multi-dispositivo**: Agora você pode iniciar uma feira no celular e terminá-la no computador. O sistema detecta sessões em aberto na nuvem e permite retomá-las instantaneamente.
+*   **⚡ Auto-Sync em Tempo Real**: Cada alteração feita (adicionar produto, editar local) dispara um backup automático para garantir que todos os seus dispositivos estejam sempre atualizados.
+
+---
+
+## 🤝 Comunidade & Suporte
+
+Tem dúvidas sobre como subir o projeto? Possui sugestões de novas funcionalidades ou quer trocar uma ideia sobre o desenvolvimento?
+
+Eu adoraria ouvir o seu feedback! 
+Para garantir que eu receba sua mensagem rapidamente, **entre no meu site de portfólio no Vercel** onde possuo um formulário dedicado para isso:
+
+👉 **[omarcilioaguiar.vercel.app](https://omarcilioaguiar.vercel.app)**
+
+Lá você também pode conferir outros projetos em que estou trabalhando e entrar em contato direto para parcerias ou colaborações.
+
 ---
 
 ## 📝 Licença
