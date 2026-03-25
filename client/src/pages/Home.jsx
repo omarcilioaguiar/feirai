@@ -576,7 +576,7 @@ export default function Home() {
                 <div className={`speed-dial-menu ${isSpeedDialOpen ? 'open' : ''}`}>
                     {/* Backup Action */}
                     <div className="speed-dial-item" onClick={() => { handleBackup(); setSpeedDialOpen(false); }}>
-                        <span>Backup Nuvem</span>
+                        <span>Sync Nuvem</span>
                         <div className="speed-dial-btn" style={{ background: '#3b82f6' }}>
                             {isBackingUp ? (
                                 <div className="spinner" style={{ width: '20px', height: '20px', border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
