@@ -103,4 +103,4 @@ Abra o endereço indicado (ex: `http://localhost:5173`) no seu navegador ou celu
 Este projeto é distribuído sob a licença **GNU Affero General Public License v3.0 (AGPL-3.0)**. Isso permite o uso e modificação, mas exige que versões modificadas (incluindo serviços SaaS) também sejam abertas. Veja o arquivo [LICENSE](./LICENSE) para mais detalhes.
 
 ---
-*Desenvolvido com 💚 e Inteligência Artificial para transformar a economia doméstica. Auxiliada com IA*
+*Desenvolvida com Auxílio de IA + Validações e Implementações Inteligentes por Mim.*
