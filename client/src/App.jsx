@@ -65,16 +65,18 @@ function App() {
               rel="noopener noreferrer"
               className="portfolio-link"
               style={{
-                fontSize: '0.6rem',
+                fontSize: '0.7rem',
                 color: 'var(--text-secondary)',
                 opacity: 0.8,
                 textDecoration: 'none',
-                transition: 'opacity 0.2s'
+                transition: 'opacity 0.2s',
+                fontWeight: 500,
+                marginLeft: '8px'
               }}
               onMouseEnter={(e) => e.target.style.opacity = '1'}
               onMouseLeave={(e) => e.target.style.opacity = '0.8'}
             >
-              saiba mais em omarcilioaguiar.vercel.app
+              Saiba Mais
             </a>
             <button onClick={toggleTheme} className="icon-btn">
               <Moon />
