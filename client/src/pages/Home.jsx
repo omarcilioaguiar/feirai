@@ -82,14 +82,30 @@ export default function Home() {
 
         if (savedOverallDiscount) setOverallDiscount(parseFloat(savedOverallDiscount) || 0);
 
+        const sanitizeCart = (items) => {
+            if (!Array.isArray(items)) return [];
+            return items.map(i => {
+                const numPrice = Number(i.price || 0);
+                const numQty = Number(i.qty || i.quantity || 0);
+                const numDisc = Number(i.discount || 0);
+                return {
+                    ...i,
+                    price: numPrice,
+                    qty: numQty,
+                    discount: numDisc,
+                    total: (numPrice * numQty) - numDisc
+                };
+            });
+        };
+
         if (savedCart) {
             const parsedCart = JSON.parse(savedCart);
             if (parsedCart.length > 0) {
                 if (skipConfirm === 'true') {
-                    setCart(parsedCart);
+                    setCart(sanitizeCart(parsedCart));
                     localStorage.removeItem('feirai_skip_confirm');
                 } else if (confirm('Você possui uma feira em andamento. Deseja recuperar os itens no carrinho?')) {
-                    setCart(parsedCart);
+                    setCart(sanitizeCart(parsedCart));
                 } else {
                     localStorage.removeItem('feirai_active_cart');
                     localStorage.removeItem('feirai_session_place');
