@@ -507,11 +507,42 @@ app.post('/api/backup', async (req, res) => {
         const backupDir = '/app/backups';
         const dbSource = process.env.DB_PATH || '/app/feirai.sqlite';
         
-        // Ensure the backup directory exists (in case the mount is absent temporarily)
         if (!fs.existsSync(backupDir)) {
             return res.status(500).json({ error: 'Diretório de backup não está acessível no container (/app/backups)' });
         }
 
+        // 1. Check existing backups
+        const files = fs.readdirSync(backupDir).filter(f => f.startsWith('feirai_') && f.endsWith('.sqlite'));
+        const mappedBackups = files.map(file => {
+            const filepath = path.join(backupDir, file);
+            return {
+                name: file,
+                filepath,
+                time: fs.statSync(filepath).mtime.getTime()
+            };
+        }).sort((a, b) => b.time - a.time); // Newest first
+
+        // 2. Get local DB stats
+        const localStats = fs.statSync(dbSource);
+        const localTime = localStats.mtime.getTime();
+
+        // 3. Sync Logic (PULL or PUSH)
+        if (mappedBackups.length > 0) {
+            const newestBackup = mappedBackups[0];
+            
+            // If backup is newer than local (using 2s buffer for stability)
+            if (newestBackup.time > localTime + 2000) {
+                console.log(`[Sync] Puxando backup mais recente: ${newestBackup.name}`);
+                fs.copyFileSync(newestBackup.filepath, dbSource);
+                return res.json({ 
+                    success: true, 
+                    action: 'PULL', 
+                    message: `Base local estava desatualizada. Puxado backup de: ${newestBackup.name}` 
+                });
+            }
+        }
+
+        // Case A: Local is newer or same -> PUSH
         const now = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -523,33 +554,28 @@ app.post('/api/backup', async (req, res) => {
         const backupFilename = `feirai_${year}_${month}_${day}_${hours}_${minutes}_${seconds}.sqlite`;
         const backupDest = path.join(backupDir, backupFilename);
 
+        console.log(`[Sync] Criando novo backup: ${backupFilename}`);
         fs.copyFileSync(dbSource, backupDest);
 
-        // Rotation logic: keep only 3 backups
-        const files = fs.readdirSync(backupDir).filter(f => f.startsWith('feirai_') && f.endsWith('.sqlite'));
-        
-        // Map with stats to sort strictly by time
-        const mappedFiles = files.map(file => {
+        // Update rotation logic to strictly keep only 3
+        const updatedFiles = fs.readdirSync(backupDir).filter(f => f.startsWith('feirai_') && f.endsWith('.sqlite'));
+        const updatedMapped = updatedFiles.map(file => {
             const filepath = path.join(backupDir, file);
-            return {
-                name: file,
-                filepath,
-                time: fs.statSync(filepath).mtime.getTime()
-            };
-        });
+            return { filepath, time: fs.statSync(filepath).mtime.getTime() };
+        }).sort((a, b) => b.time - a.time);
 
-        // Sort descending (newest first)
-        mappedFiles.sort((a, b) => b.time - a.time);
-
-        // If more than 3, delete oldest
-        if (mappedFiles.length > 3) {
-            const filesToDelete = mappedFiles.slice(3);
-            for (const f of filesToDelete) {
+        if (updatedMapped.length > 3) {
+            const toDelete = updatedMapped.slice(3);
+            for (const f of toDelete) {
                 fs.unlinkSync(f.filepath);
             }
         }
 
-        res.json({ success: true, message: `Backup ${backupFilename} criado com sucesso. Mantendo apenas os 3 mais recentes.` });
+        res.json({ 
+            success: true, 
+            action: 'PUSH',
+            message: `Backup ${backupFilename} criado. Local era mais recente.` 
+        });
     } catch (e) {
         console.error('Backup Erro:', e);
         res.status(500).json({ error: 'Falha ao sincronizar o backup: ' + e.message });

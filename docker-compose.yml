@@ -9,7 +9,7 @@ services:
     ports:
       - "3005:3005"
     volumes:
-      - ./server/feirai.sqlite:/app/feirai.sqlite
+      - ./server/data/feirai.sqlite:/app/feirai.sqlite
       - /mnt/d/Nuvem/Dropbox/Backups/apps/feirai:/app/backups
     environment:
       - DB_PATH=${DB_PATH:-/app/feirai.sqlite}
