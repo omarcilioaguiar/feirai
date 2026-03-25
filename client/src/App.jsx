@@ -53,10 +53,29 @@ function App() {
                gap: '5px',
                cursor: 'pointer',
                boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)'
-            }}>
+            }}
+            onClick={() => window.open('https://omarcilioaguiar.vercel.app', '_blank')}
+            >
               <DeviceMobile size={14} weight="fill" />
               <span>APP EM BREVE</span>
             </div>
+            <a 
+              href="https://omarcilioaguiar.vercel.app" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="portfolio-link"
+              style={{
+                fontSize: '0.6rem',
+                color: 'var(--text-secondary)',
+                opacity: 0.8,
+                textDecoration: 'none',
+                transition: 'opacity 0.2s'
+              }}
+              onMouseEnter={(e) => e.target.style.opacity = '1'}
+              onMouseLeave={(e) => e.target.style.opacity = '0.8'}
+            >
+              saiba mais em omarcilioaguiar.vercel.app
+            </a>
             <button onClick={toggleTheme} className="icon-btn">
               <Moon />
             </button>
