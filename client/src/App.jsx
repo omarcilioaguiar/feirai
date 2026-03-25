@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
-import { ShoppingCart, Package, Storefront, ChartPieSlice, ClockCounterClockwise, Leaf, Moon, ShoppingBag } from '@phosphor-icons/react';
+import { ShoppingCart, Package, Storefront, ChartPieSlice, ClockCounterClockwise, Leaf, Moon, ShoppingBag, DeviceMobile } from '@phosphor-icons/react';
 import { useState, useEffect } from 'react';
 import Home from './pages/Home';
 import Products from './pages/Products';
@@ -40,7 +40,23 @@ function App() {
             <Leaf weight="fill" />
             <h1>FeirAI</h1>
           </div>
-          <div className="header-actions">
+          <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="mobile-badge" style={{ 
+               background: 'linear-gradient(135deg, var(--secondary), var(--secondary-dark))',
+               color: 'white',
+               padding: '4px 10px',
+               borderRadius: '12px',
+               fontSize: '0.65rem',
+               fontWeight: 'bold',
+               display: 'flex',
+               alignItems: 'center',
+               gap: '5px',
+               cursor: 'pointer',
+               boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)'
+            }}>
+              <DeviceMobile size={14} weight="fill" />
+              <span>APP EM BREVE</span>
+            </div>
             <button onClick={toggleTheme} className="icon-btn">
               <Moon />
             </button>

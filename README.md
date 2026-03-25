@@ -89,8 +89,15 @@ Abra o endereço indicado (ex: `http://localhost:5173`) no seu navegador ou celu
 
 ---
 
-## 📝 Licença
-Este projeto foi desenvolvido como um MVP inteligente para gestão financeira doméstica. Sinta-se à vontade para expandir!
+### [24/03/2026] - Planejamento & Proteção Legal (v1.1)
+*   **⚖️ Proteção de Código**: Adição da licença **AGPLv3**, garantindo que o projeto permaneça aberto mas protegendo contra exploração comercial indevida sem reciprocidade.
+*   **📱 Roadmap Mobile**: Lançamento da campanha "APP EM BREVE" com banner interativo na interface, preparando o público para a versão comercial.
+*   **🗺️ Mapeamento Arquitetural**: Documentação técnica completa das rotas e esquemas para facilitar futuras integrações.
 
 ---
-*Desenvolvido com 💚 e Inteligência Artificial.*
+
+## 📝 Licença
+Este projeto é distribuído sob a licença **GNU Affero General Public License v3.0 (AGPL-3.0)**. Isso permite o uso e modificação, mas exige que versões modificadas (incluindo serviços SaaS) também sejam abertas. Veja o arquivo [LICENSE](./LICENSE) para mais detalhes.
+
+---
+*Desenvolvido com 💚 e Inteligência Artificial para transformar a economia doméstica.*
