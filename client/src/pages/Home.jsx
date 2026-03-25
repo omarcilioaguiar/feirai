@@ -42,6 +42,8 @@ export default function Home() {
 
     // Backup State
     const [isBackingUp, setIsBackingUp] = useState(false);
+    const [openSessions, setOpenSessions] = useState([]); // List of sessions from DB
+
 
     // Searchable Drops State
     const [productSearch, setProductSearch] = useState('');
@@ -54,6 +56,21 @@ export default function Home() {
     useEffect(() => {
         api.get('/products').then(res => setProducts(res.data)).catch(console.error);
         api.get('/places').then(res => setPlaces(res.data)).catch(console.error);
+
+        // Fetch Open Sessions from DB for Multi-device resume
+        api.get('/open-sessions').then(res => {
+            if (res.data) setOpenSessions(res.data);
+            if (res.data && res.data.length > 0) {
+                const session = res.data[0];
+                const savedCart = localStorage.getItem('feirai_active_cart');
+                
+                if (!savedCart || JSON.parse(savedCart).length === 0) {
+                   if (confirm(`Você possui uma feira aberta em outro dispositivo (${session.placeName || 'Sem Local'}). Deseja retomar?`)) {
+                       resumeSession(session);
+                   }
+                }
+            }
+        }).catch(console.error);
 
         const savedSessionPlace = localStorage.getItem('feirai_session_place');
         if (savedSessionPlace) setSessionPlaceId(savedSessionPlace);
@@ -92,16 +109,30 @@ export default function Home() {
         }
     }, []);
 
-    // Persist Cart and Overall Discount to LocalStorage whenever they change
+    // Persist Cart and Overall Discount to DB (Autosave with debounce)
     useEffect(() => {
         if (cart.length > 0) {
             localStorage.setItem('feirai_active_cart', JSON.stringify(cart));
             localStorage.setItem('feirai_session_place', sessionPlaceId);
             localStorage.setItem('feirai_active_discount', overallDiscount.toString());
+
+            // Autosave to Server (Syncs to Cloud)
+            const timeout = setTimeout(() => {
+                api.post('/open-sessions', {
+                    id: 'current_session', // Use a fixed ID for the active session to simplify
+                    place_id: sessionPlaceId,
+                    items: cart,
+                    discount: overallDiscount
+                }).catch(err => console.error("Autosave failed:", err));
+            }, 2000); 
+
+            return () => clearTimeout(timeout);
         } else {
             localStorage.removeItem('feirai_active_cart');
             localStorage.removeItem('feirai_session_place');
             localStorage.removeItem('feirai_active_discount');
+            // Clean up server side if empty
+            api.delete('/open-sessions/current_session').catch(() => {});
         }
     }, [cart, sessionPlaceId, overallDiscount]);
 
@@ -381,8 +412,40 @@ export default function Home() {
 
     const selectedProductUnit = products.find(p => p.id === selectedProduct)?.unit;
 
+    const resumeSession = (session) => {
+        setCart(session.items.map(i => ({
+            id: i.id,
+            productId: i.product_id,
+            productName: i.productName,
+            price: i.price,
+            qty: i.quantity,
+            discount: i.discount,
+            shoppingListId: i.shopping_list_id,
+            unit: i.unit
+        })));
+        setSessionPlaceId(session.place_id || '');
+        setOverallDiscount(session.discount || 0);
+        setOpenSessions(prev => prev.filter(s => s.id !== session.id));
+    };
+
     return (
         <div>
+            {openSessions.length > 0 && cart.length === 0 && (
+                <div style={{ backgroundColor: 'var(--surface)', padding: '1rem', borderRadius: 'var(--radius-lg)', marginBottom: '1rem', border: '1px dashed var(--secondary)' }}>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                        <CloudArrowUp size={16} style={{ marginRight: '5px', verticalAlign: 'middle' }} />
+                        Feiras em aberto na nuvem:
+                    </div>
+                    {openSessions.map(s => (
+                        <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: 'var(--radius-md)', marginBottom: '5px' }}>
+                             <div style={{ fontSize: '0.9rem' }}>
+                                <strong>{s.placeName || 'Supermercado'}</strong> - {new Date(s.date).toLocaleDateString('pt-BR')}
+                             </div>
+                             <button className="btn btn-secondary btn-sm" onClick={() => resumeSession(s)}>Retomar</button>
+                        </div>
+                    ))}
+                </div>
+            )}
             <div className="total-display">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                     <div>

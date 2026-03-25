@@ -15,6 +15,58 @@ app.use(express.json());
 
 const generateId = () => Math.random().toString(36).substr(2, 9); // Simple uuid
 
+// --- Backup & Sync Core Engine ---
+const performBackupSync = async () => {
+    try {
+        const backupDir = '/app/backups';
+        const dbSource = process.env.DB_PATH || '/app/feirai.sqlite';
+        
+        if (!fs.existsSync(backupDir)) return { error: 'Backup dir not accessible' };
+
+        const files = fs.readdirSync(backupDir).filter(f => f.startsWith('feirai_') && f.endsWith('.sqlite'));
+        const mappedBackups = files.map(file => {
+            const filepath = path.join(backupDir, file);
+            return { name: file, filepath, time: fs.statSync(filepath).mtime.getTime() };
+        }).sort((a, b) => b.time - a.time);
+
+        const localStats = fs.statSync(dbSource);
+        const localTime = localStats.mtime.getTime();
+
+        // 1. Check if we need to PULL (Cloud is newer)
+        if (mappedBackups.length > 0) {
+            const newest = mappedBackups[0];
+            if (newest.time > localTime + 2000) {
+                console.log(`[Sync] PULLING newer cloud data: ${newest.name}`);
+                fs.copyFileSync(newest.filepath, dbSource);
+                return { action: 'PULL', name: newest.name };
+            }
+        }
+
+        // 2. We need to PUSH (Local is newer or same)
+        const now = new Date();
+        const ts = `${now.getFullYear()}_${String(now.getMonth()+1).padStart(2,'0')}_${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}_${String(now.getMinutes()).padStart(2,'0')}_${String(now.getSeconds()).padStart(2,'0')}`;
+        const backupFilename = `feirai_${ts}.sqlite`;
+        const backupDest = path.join(backupDir, backupFilename);
+
+        console.log(`[Sync] PUSHING live changes to: ${backupFilename}`);
+        fs.copyFileSync(dbSource, backupDest);
+
+        // Rotation
+        const updated = fs.readdirSync(backupDir).filter(f => f.startsWith('feirai_') && f.endsWith('.sqlite'))
+            .map(f => ({ path: path.join(backupDir, f), time: fs.statSync(path.join(backupDir, f)).mtime.getTime() }))
+            .sort((a,b) => b.time - a.time);
+
+        if (updated.length > 3) {
+            updated.slice(3).forEach(f => fs.unlinkSync(f.path));
+        }
+        return { action: 'PUSH', name: backupFilename };
+    } catch (e) {
+        console.error('Core Sync Failure:', e);
+        return { error: e.message };
+    }
+};
+
+
 // --- Products Route ---
 app.get('/api/products', async (req, res) => {
     try {
@@ -31,6 +83,7 @@ app.put('/api/products/:id', async (req, res) => {
     const upperName = (name || '').toUpperCase();
     try {
         await dbRun('UPDATE Product SET name = ?, category = ?, unit = ?, brand = ? WHERE id = ?', [upperName, category, unit, brand, id]);
+        await performBackupSync();
         res.json({ success: true, name: upperName });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -41,6 +94,7 @@ app.delete('/api/products/:id', async (req, res) => {
     const { id } = req.params;
     try {
         await dbRun('DELETE FROM Product WHERE id = ?', [id]);
+        await performBackupSync();
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -52,6 +106,7 @@ app.post('/api/products', async (req, res) => {
     const id = generateId();
     try {
         await dbRun('INSERT INTO Product (id, name, category, unit, brand) VALUES (?, ?, ?, ?, ?)', [id, upperName, category, unit, brand]);
+        await performBackupSync();
         res.json({ id, name: upperName, category, unit, brand });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -73,6 +128,7 @@ app.put('/api/places/:id', async (req, res) => {
     console.log('Atualizando local:', { id, name, location, lat, lng });
     try {
         await dbRun('UPDATE Place SET name = ?, location = ?, lat = ?, lng = ? WHERE id = ?', [name, location, lat, lng, id]);
+        await performBackupSync();
         res.json({ success: true });
     } catch (e) {
         console.error('Erro ao atualizar local:', e);
@@ -84,6 +140,7 @@ app.delete('/api/places/:id', async (req, res) => {
     const { id } = req.params;
     try {
         await dbRun('DELETE FROM Place WHERE id = ?', [id]);
+        await performBackupSync();
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -96,6 +153,7 @@ app.post('/api/places', async (req, res) => {
     const id = generateId();
     try {
         await dbRun('INSERT INTO Place (id, name, location, lat, lng) VALUES (?, ?, ?, ?, ?)', [id, name, location, lat || null, lng || null]);
+        await performBackupSync();
         res.json({ id, name, location, lat, lng });
     } catch (e) {
         console.error('Erro ao criar local:', e);
@@ -125,6 +183,7 @@ app.post('/api/shopping-list', async (req, res) => {
     const now = new Date().toISOString();
     try {
         await dbRun('INSERT INTO ShoppingList (id, product_id, quantity, created_at, done) VALUES (?, ?, ?, ?, 0)', [id, productId, quantity, now]);
+        await performBackupSync();
         res.json({ id, productId, quantity, created_at: now });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -141,6 +200,72 @@ app.delete('/api/shopping-list/:id', async (req, res) => {
     }
 });
 
+// --- Open/Active Shopping Sessions ---
+app.get('/api/open-sessions', async (req, res) => {
+    try {
+        const query = `
+            SELECT r.*, p.name as placeName 
+            FROM OpenShoppingSession r
+            LEFT JOIN Place p ON r.place_id = p.id
+            ORDER BY date DESC
+        `;
+        const sessions = await dbAll(query);
+        for (const session of sessions) {
+            session.items = await dbAll(`
+                SELECT i.*, p.name as productName, p.unit
+                FROM OpenShoppingItem i
+                JOIN Product p ON i.product_id = p.id
+                WHERE i.session_id = ?
+            `, [session.id]);
+        }
+        res.json(sessions);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/open-sessions', async (req, res) => {
+    const { id, name, total, items, discount = 0, place_id } = req.body;
+    const session_id = id || generateId();
+    const date = new Date().toISOString();
+    try {
+        await dbRun('DELETE FROM OpenShoppingItem WHERE session_id = ?', [session_id]);
+        await dbRun('DELETE FROM OpenShoppingSession WHERE id = ?', [session_id]);
+        
+        await dbRun(
+            'INSERT INTO OpenShoppingSession (id, name, place_id, date, discount) VALUES (?, ?, ?, ?, ?)',
+            [session_id, name || 'Feira em aberto', place_id, date, discount]
+        );
+        
+        for (const item of items) {
+            const itemId = item.id && isNaN(item.id) ? item.id : generateId();
+            const pId = item.productId || item.product_id;
+            const plId = item.placeId || item.place_id || place_id;
+            await dbRun(
+                'INSERT INTO OpenShoppingItem (id, session_id, product_id, place_id, price, quantity, discount, shopping_list_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [itemId, session_id, pId, plId, item.price, item.qty || item.quantity, item.discount || 0, item.shoppingListId || null]
+            );
+        }
+        await performBackupSync();
+        res.json({ success: true, id: session_id });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/open-sessions/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await dbRun('DELETE FROM OpenShoppingItem WHERE session_id = ?', [id]);
+        await dbRun('DELETE FROM OpenShoppingSession WHERE id = ?', [id]);
+        await performBackupSync();
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- History / Sessions Route ---
 app.get('/api/sessions', async (req, res) => {
     try {
         const query = `
@@ -174,6 +299,7 @@ app.post('/api/sessions', async (req, res) => {
                 [itemId, runId, pId, plId, item.price, item.quantity, item.discount || 0]
             );
         }
+        await performBackupSync();
         res.json({ success: true, id: runId });
     } catch (e) {
         res.status(500).json({ error: e.message });

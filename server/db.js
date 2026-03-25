@@ -77,6 +77,29 @@ function initDb() {
             done INTEGER DEFAULT 0,
             FOREIGN KEY(product_id) REFERENCES Product(id)
         )`);
+
+        // Open/Active Shopping Sessions (for multi-device sync)
+        db.run(`CREATE TABLE IF NOT EXISTS OpenShoppingSession (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            place_id TEXT,
+            date TEXT NOT NULL,
+            discount REAL DEFAULT 0,
+            FOREIGN KEY(place_id) REFERENCES Place(id)
+        )`);
+
+        db.run(`CREATE TABLE IF NOT EXISTS OpenShoppingItem (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            product_id TEXT NOT NULL,
+            place_id TEXT,
+            price REAL,
+            quantity REAL,
+            discount REAL DEFAULT 0,
+            shopping_list_id TEXT,
+            FOREIGN KEY(session_id) REFERENCES OpenShoppingSession(id),
+            FOREIGN KEY(product_id) REFERENCES Product(id)
+        )`);
     });
 }
 
