@@ -12,6 +12,14 @@ const formatDate = (dateStr) => {
     }
 };
 
+const toDateTimeLocal = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 export default function History() {
     const [history, setHistory] = useState([]);
     const [expandedSessionId, setExpandedSessionId] = useState(null);
@@ -63,6 +71,7 @@ export default function History() {
             const res = await api.get(`/sessions/${session.id}`);
             setEditingSession({
                 ...session,
+                date: toDateTimeLocal(session.date), // Store as local string YYYY-MM-DDTHH:mm
                 items: res.data.items || []
             });
         } catch (err) {
@@ -76,8 +85,12 @@ export default function History() {
             const totalItems = editingSession.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
             const finalTotal = Math.max(0, totalItems - (editingSession.discount || 0));
             
+            // Convert local current date string back to ISO before sending to API
+            const isoDate = editingSession.date ? new Date(editingSession.date).toISOString() : new Date().toISOString();
+
             await api.put(`/sessions/${editingSession.id}`, {
                 ...editingSession,
+                date: isoDate,
                 total: finalTotal
             });
             setEditingSession(null);
@@ -191,8 +204,8 @@ export default function History() {
                             <input 
                                 type="datetime-local" 
                                 className="form-control" 
-                                value={editingSession.date && editingSession.date.length >= 16 ? editingSession.date.substring(0, 16) : ''} 
-                                onChange={(e) => setEditingSession({ ...editingSession, date: new Date(e.target.value).toISOString() })}
+                                value={editingSession.date || ''} 
+                                onChange={(e) => setEditingSession({ ...editingSession, date: e.target.value })}
                             />
                         </div>
 

@@ -102,6 +102,10 @@ Abra o endereço indicado (ex: `http://localhost:5173`) no seu navegador ou celu
 *   **📱 Retomada Multi-dispositivo**: Agora você pode iniciar uma feira no celular e terminá-la no computador. O sistema detecta sessões em aberto na nuvem e permite retomá-las instantaneamente.
 *   **⚡ Auto-Sync em Tempo Real**: Cada alteração feita (adicionar produto, editar local) dispara um backup automático para garantir que todos os seus dispositivos estejam sempre atualizados.
 
+### [26/03/2026] - Correção de Histórico & Fusos Horários (v1.3)
+*   **⏰ Estabilidade de Datas**: Correção definitiva do bug de "salto" de horário (fuso horário) na edição de compras do histórico. Agora o sistema utiliza strings locais desconectadas durante a edição para evitar reversões indesejadas para o formato UTC.
+*   **🕒 Input de Tempo Preciso**: Otimização do componente de formulário para garantir que o horário visualizado no `datetime-local` seja exatamente o que será salvo no banco de dados.
+
 ---
 
 ## 🤝 Comunidade & Suporte
