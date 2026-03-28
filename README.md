@@ -106,6 +106,12 @@ Abra o endereço indicado (ex: `http://localhost:5173`) no seu navegador ou celu
 *   **⏰ Estabilidade de Datas**: Correção definitiva do bug de "salto" de horário (fuso horário) na edição de compras do histórico. Agora o sistema utiliza strings locais desconectadas durante a edição para evitar reversões indesejadas para o formato UTC.
 *   **🕒 Input de Tempo Preciso**: Otimização do componente de formulário para garantir que o horário visualizado no `datetime-local` seja exatamente o que será salvo no banco de dados.
 
+### [28/03/2026] - Planejamento Inteligente Multilistas (v1.4)
+*   **📂 Múltiplas Listas de Planejamento**: Agora é possível criar e gerenciar listas separadas por nome (ex: "Churrasco", "Casa", "Chácara") no módulo de Planejamento Inteligente.
+*   **🧠 Agrupamento em Tempo Real**: Conforme você adiciona produtos no planejamento, o sistema os organiza automaticamente sob o supermercado onde o item é historicamente mais barato.
+*   **🔄 Fluxo de Confirmação Interativo**: Ao tentar guardar um item do carrinho na lista de planejamento, o FeirAI agora avisa se o item já está planejado para aquele local e oferece a opção de somar as quantidades automaticamente.
+*   **🏗️ Refatoração de Banco de Dados**: Evolução do esquema SQLite para suportar metadados de listas e fusão inteligente de quantidades duplicadas.
+
 ---
 
 ## 🤝 Comunidade & Suporte

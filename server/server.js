@@ -164,13 +164,20 @@ app.post('/api/places', async (req, res) => {
 // --- History / Sessions Route ---
 // --- Shopping List (Future Purchases) ---
 app.get('/api/shopping-list', async (req, res) => {
+    const { listName } = req.query;
     try {
-        const rows = await dbAll(`
+        let query = `
             SELECT sl.*, p.name as productName, p.unit
             FROM ShoppingList sl
             JOIN Product p ON sl.product_id = p.id
-            ORDER BY created_at DESC
-        `);
+        `;
+        let params = [];
+        if (listName) {
+            query += " WHERE sl.list_name = ? ";
+            params.push(listName);
+        }
+        query += " ORDER BY sl.created_at DESC ";
+        const rows = await dbAll(query, params);
         res.json(rows);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -178,13 +185,21 @@ app.get('/api/shopping-list', async (req, res) => {
 });
 
 app.post('/api/shopping-list', async (req, res) => {
-    const { productId, quantity = 1 } = req.body;
-    const id = generateId();
-    const now = new Date().toISOString();
+    const { productId, quantity = 1, listName = 'Geral' } = req.body;
     try {
-        await dbRun('INSERT INTO ShoppingList (id, product_id, quantity, created_at, done) VALUES (?, ?, ?, ?, 0)', [id, productId, quantity, now]);
+        // Optimization: Merging existing items in the same list
+        const existing = await dbGet('SELECT * FROM ShoppingList WHERE product_id = ? AND list_name = ? AND done = 0', [productId, listName]);
+        if (existing) {
+            await dbRun('UPDATE ShoppingList SET quantity = quantity + ? WHERE id = ?', [quantity, existing.id]);
+            await performBackupSync();
+            return res.json({ id: existing.id, productId, quantity: existing.quantity + quantity, updated: true });
+        }
+
+        const id = generateId();
+        const now = new Date().toISOString();
+        await dbRun('INSERT INTO ShoppingList (id, product_id, quantity, created_at, done, list_name) VALUES (?, ?, ?, ?, 0, ?)', [id, productId, quantity, now, listName]);
         await performBackupSync();
-        res.json({ id, productId, quantity, created_at: now });
+        res.json({ id, productId, quantity, created_at: now, list_name: listName });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

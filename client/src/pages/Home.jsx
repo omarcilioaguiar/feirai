@@ -310,9 +310,23 @@ export default function Home() {
     const handleSaveToList = async () => {
         if (!selectedProduct) return;
         try {
+            // Check if item already exists in any planned list
+            const checkRes = await api.get('/shopping-list');
+            const existingItem = checkRes.data.find(i => i.product_id === selectedProduct);
+            
+            if (existingItem) {
+                const marketName = insight?.bestPlace || 'seu mercado de preferência';
+                const msg = `O item "${existingItem.productName}" já está na sua lista planejada para o mercado "${marketName}".\n\nDeseja somar esta quantidade (${qty}) à que já existe lá (${existingItem.quantity})?`;
+                
+                if (!window.confirm(msg)) {
+                    return; // User cancelled, stays in cart modal
+                }
+            }
+
             await api.post('/shopping-list', {
                 productId: selectedProduct,
-                quantity: qty
+                quantity: qty,
+                listName: existingItem ? existingItem.list_name : 'Minha Lista'
             });
             setModalOpen(false);
             alert("Item guardado na sua Lista de Economia!");

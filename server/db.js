@@ -75,8 +75,11 @@ function initDb() {
             quantity REAL DEFAULT 1,
             created_at TEXT NOT NULL,
             done INTEGER DEFAULT 0,
+            list_name TEXT DEFAULT 'Geral',
             FOREIGN KEY(product_id) REFERENCES Product(id)
         )`);
+
+        db.run('ALTER TABLE ShoppingList ADD COLUMN list_name TEXT DEFAULT "Geral"', (err) => {});
 
         // Open/Active Shopping Sessions (for multi-device sync)
         db.run(`CREATE TABLE IF NOT EXISTS OpenShoppingSession (
