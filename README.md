@@ -111,6 +111,7 @@ Abra o endereço indicado (ex: `http://localhost:5173`) no seu navegador ou celu
 *   **🧠 Agrupamento em Tempo Real**: Conforme você adiciona produtos no planejamento, o sistema os organiza automaticamente sob o supermercado onde o item é historicamente mais barato.
 *   **🔄 Fluxo de Confirmação Interativo**: Ao tentar guardar um item do carrinho na lista de planejamento, o FeirAI agora avisa se o item já está planejado para aquele local e oferece a opção de somar as quantidades automaticamente.
 *   **🏗️ Refatoração de Banco de Dados**: Evolução do esquema SQLite para suportar metadados de listas e fusão inteligente de quantidades duplicadas.
+*   **🎨 Refinamento UI/UX (v1.5)**: Botão de ação renomeado para "Guardar na Lista" para maior clareza e implementação da identidade visual oficial com o novo Favicon Emerald.
 
 ---
 

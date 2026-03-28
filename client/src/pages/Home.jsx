@@ -773,7 +773,7 @@ export default function Home() {
                                 style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)' }}
                                 onClick={handleSaveToList}
                             >
-                                Guardar p/ Outro Local
+                                Guardar na Lista
                             </button>
                         )}
                     </div>
