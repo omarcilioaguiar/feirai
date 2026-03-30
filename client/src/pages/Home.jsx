@@ -1,4 +1,4 @@
-import { ShoppingCartSimple, Trash, Storefront, Sparkle, Plus, CheckCircle, QrCode, CloudArrowUp, Selection, Keyboard, PencilSimple, Tag } from '@phosphor-icons/react';
+import { ShoppingCartSimple, Trash, Storefront, Sparkle, Plus, CheckCircle, QrCode, CloudArrowUp, Selection, Keyboard, PencilSimple, Tag, MagnifyingGlass } from '@phosphor-icons/react';
 import { useState, useEffect } from 'react';
 import api from '../api';
 import Modal from '../components/Modal';
@@ -20,7 +20,7 @@ export default function Home() {
     const [newPlaceData, setNewPlaceData] = useState({ name: '', location: '', lat: null, lng: null });
 
     const [isNewProductModalOpen, setNewProductModalOpen] = useState(false);
-    const [newProductData, setNewProductData] = useState({ name: '', unit: 'un', category: 'Geral' });
+    const [newProductData, setNewProductData] = useState({ name: '', unit: 'un', category: 'Geral', brand: '' });
 
     // Item Form State
     const [selectedProduct, setSelectedProduct] = useState('');
@@ -51,6 +51,7 @@ export default function Home() {
     const [placeSearch, setPlaceSearch] = useState('');
     const [isPlaceDropdownOpen, setIsPlaceDropdownOpen] = useState(false);
     const [paidAmount, setPaidAmount] = useState(''); // State for "Valor Pago" logic
+    const [cartSearch, setCartSearch] = useState(''); // Search terms for items already in cart
 
     // Initial Load & Restore Persistent Cart and Session Place
     useEffect(() => {
@@ -300,7 +301,7 @@ export default function Home() {
             setProducts([...products, res.data]);
             setSelectedProduct(res.data.id);
             setNewProductModalOpen(false);
-            setNewProductData({ name: '', unit: 'un', category: 'Geral' });
+            setNewProductData({ name: '', unit: 'un', category: 'Geral', brand: '' });
         } catch (err) {
             console.error(err);
             alert("Erro ao criar novo produto");
@@ -402,7 +403,8 @@ export default function Home() {
 
     const removeCartItem = (id) => setCart(cart.filter(i => i.id !== id));
 
-    const totalCart = Math.max(0, cart.reduce((sum, item) => sum + item.total, 0) - overallDiscount);
+    const cartSubtotal = cart.reduce((sum, item) => sum + item.total, 0);
+    const totalCart = Math.max(0, cartSubtotal - overallDiscount);
 
     const finishShopping = async () => {
         if(confirm('Deseja finalizar esta feira e salvar no histórico?')) {
@@ -551,6 +553,19 @@ export default function Home() {
 
             <div className="header-split" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop: '1.5rem' }}>
                 <h3>Itens no Carrinho</h3>
+                {cart.length > 0 && (
+                    <div style={{ position: 'relative', flex: 1, marginLeft: '1rem', maxWidth: '200px' }}>
+                        <MagnifyingGlass size={18} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', zIndex: 1 }} />
+                        <input 
+                            type="text"
+                            className="form-control"
+                            placeholder="Buscar no carrinho..."
+                            value={cartSearch}
+                            onChange={(e) => setCartSearch(e.target.value)}
+                            style={{ paddingLeft: '32px', height: '36px', fontSize: '0.85rem', background: 'var(--surface)' }}
+                        />
+                    </div>
+                )}
             </div>
 
             <div id="cart-list" style={{ marginTop: '1rem' }}>
@@ -561,28 +576,44 @@ export default function Home() {
                         <p>Adicione itens para começar a feira.</p>
                     </div>
                 ) : (
-                    cart.slice().sort((a,b) => a.productName.localeCompare(b.productName)).map(item => (
-                        <div className="list-item" key={item.id}>
-                            <div className="item-main">
-                                <span className="item-name">{item.productName}</span>
-                                <span className="item-meta">
-                                    <Storefront /> {item.placeName}
-                                </span>
+                    (() => {
+                        const filteredItems = cart
+                            .filter(i => i.productName.toLowerCase().includes(cartSearch.toLowerCase()))
+                            .sort((a,b) => a.productName.localeCompare(b.productName));
+
+                        if (filteredItems.length === 0 && cartSearch) {
+                            return (
+                                <div className="empty-state" style={{ padding: '2rem 1rem' }}>
+                                    <MagnifyingGlass size={48} weight="light" opacity={0.3} />
+                                    <p style={{ marginTop: '1rem' }}>Nenhum item encontrado para "{cartSearch}"</p>
+                                    <button className="btn btn-sm" style={{ marginTop: '1rem', fontSize: '0.8rem' }} onClick={() => setCartSearch('')}>Limpar busca</button>
+                                </div>
+                            );
+                        }
+
+                        return filteredItems.map(item => (
+                            <div className="list-item" key={item.id}>
+                                <div className="item-main">
+                                    <span className="item-name">{item.productName}</span>
+                                    <span className="item-meta">
+                                        <Storefront /> {item.placeName}
+                                    </span>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div className="item-price">{formatCurrency(item.total)}</div>
+                                    <div className="item-qty">{Math.round(item.qty)} {item.unit} x {formatCurrency(item.price)}</div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button className="icon-btn" style={{ color: 'var(--primary)' }} onClick={() => editCartItem(item)}>
+                                        <PencilSimple weight="fill" />
+                                    </button>
+                                    <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => removeCartItem(item.id)}>
+                                        <Trash weight="fill" />
+                                    </button>
+                                </div>
                             </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <div className="item-price">{formatCurrency(item.total)}</div>
-                                <div className="item-qty">{Math.round(item.qty)} {item.unit} x {formatCurrency(item.price)}</div>
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <button className="icon-btn" style={{ color: 'var(--primary)' }} onClick={() => editCartItem(item)}>
-                                    <PencilSimple weight="fill" />
-                                </button>
-                                <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => removeCartItem(item.id)}>
-                                    <Trash weight="fill" />
-                                </button>
-                            </div>
-                        </div>
-                    ))
+                        ));
+                    })()
                 )}
             </div>
 
@@ -820,7 +851,19 @@ export default function Home() {
                     </div>
                     <div className="form-group">
                         <label>Unidade de Medida</label>
-                        <select className="form-control" required value={newProductData.unit} onChange={e => setNewProductData({ ...newProductData, unit: e.target.value })}>
+                        <select 
+                            className="form-control" 
+                            required 
+                            value={newProductData.unit} 
+                            onChange={e => {
+                                const u = e.target.value;
+                                setNewProductData({ 
+                                    ...newProductData, 
+                                    unit: u,
+                                    brand: (u === 'un' || u === 'pc') ? newProductData.brand : '' 
+                                });
+                            }}
+                        >
                             <option value="un">un</option>
                             <option value="kg">kg</option>
                             <option value="pc">pc</option>
@@ -829,6 +872,18 @@ export default function Home() {
                             <option value="cx">cx</option>
                         </select>
                     </div>
+                    {(newProductData.unit === 'un' || newProductData.unit === 'pc') && (
+                        <div className="form-group">
+                            <label>Marca (Opcional)</label>
+                            <input 
+                                type="text" 
+                                className="form-control" 
+                                value={newProductData.brand} 
+                                onChange={e => setNewProductData({ ...newProductData, brand: e.target.value.toUpperCase() })} 
+                                placeholder="Ex: TIO JOÃO"
+                            />
+                        </div>
+                    )}
                     <div className="form-group">
                         <label>Categoria</label>
                         <select className="form-control" required value={newProductData.category} onChange={e => setNewProductData({ ...newProductData, category: e.target.value })}>
@@ -969,8 +1024,8 @@ export default function Home() {
             {/* Modal for Overall Discount */}
             <Modal isOpen={isDiscountModalOpen} onClose={() => setIsDiscountModalOpen(false)} title="Desconto da Feira">
                 <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Subtotal dos Itens</div>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatCurrency(totalCart)}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Subtotal da Compra</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{formatCurrency(cartSubtotal)}</div>
                 </div>
 
                 <div className="form-group" style={{ marginBottom: '1.5rem' }}>
@@ -979,17 +1034,22 @@ export default function Home() {
                         type="number" 
                         step="0.01" 
                         className="form-control" 
-                        value={isDiscountModalOpen && paidAmount === '' ? (totalCart - overallDiscount).toFixed(2) : paidAmount}
+                        value={paidAmount}
                         onChange={e => {
                             const val = e.target.value;
                             setPaidAmount(val);
                             const numVal = parseFloat(val);
                             if (!isNaN(numVal)) {
-                                const diff = totalCart - numVal;
+                                const diff = cartSubtotal - numVal;
                                 setOverallDiscount(diff > 0 ? diff : 0);
+                            } else if (val === '') {
+                                setOverallDiscount(0);
                             }
                         }}
-                        placeholder="Quanto você pagou no total?"
+                        onFocus={() => {
+                            if (paidAmount === '') setPaidAmount((cartSubtotal - overallDiscount).toFixed(2));
+                        }}
+                        placeholder="0.00"
                     />
                     <small style={{ color: 'var(--text-tertiary)', display: 'block', marginTop: '4px' }}>
                         Ajuste o valor final pago para calcular o desconto automaticamente.
@@ -1003,11 +1063,16 @@ export default function Home() {
                         step="0.01" 
                         min="0" 
                         className="form-control" 
-                        value={overallDiscount} 
+                        value={overallDiscount || ''} 
                         onChange={e => {
-                            const disc = parseFloat(e.target.value) || 0;
+                            const val = e.target.value;
+                            const disc = parseFloat(val) || 0;
                             setOverallDiscount(disc);
-                            setPaidAmount((totalCart - disc).toFixed(2));
+                            if (val !== '') {
+                                setPaidAmount((cartSubtotal - disc).toFixed(2));
+                            } else {
+                                setPaidAmount('');
+                            }
                         }} 
                         placeholder="0.00" 
                     />

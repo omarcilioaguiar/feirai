@@ -1,7 +1,8 @@
-import { ShoppingBag, Trash, Storefront, Sparkle, PlusCircle } from '@phosphor-icons/react';
+import { ShoppingBag, Trash, Storefront, Sparkle, PlusCircle, MagnifyingGlass, Plus, PencilSimple, Tag, CaretDown, Selection } from '@phosphor-icons/react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
+import Modal from '../components/Modal';
 
 const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -15,9 +16,22 @@ export default function List() {
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
+    // Search and New product states
+    const [productSearch, setProductSearch] = useState('');
+    const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+    const [isNewProductModalOpen, setNewProductModalOpen] = useState(false);
+    const [newProductData, setNewProductData] = useState({ name: '', unit: 'un', category: 'Geral', brand: '' });
+    const [isNewPlaceModalOpen, setNewPlaceModalOpen] = useState(false);
+    const [newPlaceData, setNewPlaceData] = useState({ name: '', location: '', lat: null, lng: null });
+    const [places, setPlaces] = useState([]);
+    const [placeSearch, setPlaceSearch] = useState('');
+    const [isPlaceDropdownOpen, setIsPlaceDropdownOpen] = useState(false);
+    const [selectedPlaceId, setSelectedPlaceId] = useState('');
+
     useEffect(() => {
         loadList();
         api.get('/products').then(res => setProducts(res.data)).catch(console.error);
+        api.get('/places').then(res => setPlaces(res.data)).catch(console.error);
     }, []);
 
     const loadList = async () => {
@@ -50,17 +64,51 @@ export default function List() {
         try {
             await api.post('/shopping-list', {
                 productId: selectedProduct,
+                placeId: selectedPlaceId || null,
                 quantity: qty,
                 listName: listName || 'Minha Lista'
             });
             setSelectedProduct('');
+            setSelectedPlaceId('');
             setQty(1);
+            setProductSearch('');
+            setPlaceSearch('');
             await loadList();
         } catch (err) {
             console.error(err);
             alert("Erro ao adicionar item à lista.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleCreateNewProduct = async (e) => {
+        e.preventDefault();
+        try {
+            const res = await api.post('/products', newProductData);
+            setProducts([...products, res.data]);
+            setSelectedProduct(res.data.id);
+            setProductSearch(res.data.name);
+            setNewProductModalOpen(false);
+            setNewProductData({ name: '', unit: 'un', category: 'Geral', brand: '' });
+        } catch (err) {
+            console.error(err);
+            alert("Erro ao criar novo produto");
+        }
+    };
+
+    const handleCreateNewPlace = async (e) => {
+        e.preventDefault();
+        try {
+            const res = await api.post('/places', newPlaceData);
+            setPlaces([...places, res.data]);
+            setSelectedPlaceId(res.data.id);
+            setPlaceSearch(res.data.name);
+            setNewPlaceModalOpen(false);
+            setNewPlaceData({ name: '', location: '', lat: null, lng: null });
+        } catch (err) {
+            console.error(err);
+            alert("Erro ao criar novo local");
         }
     };
 
@@ -121,7 +169,7 @@ export default function List() {
         if (!acc[listTitle]) acc[listTitle] = {};
         
         const deal = bestBargains[item.product_id];
-        const marketName = deal ? deal.placeName : 'Ainda sem local definido';
+        const marketName = item.placeName || (deal ? deal.placeName : 'Ainda sem local definido');
         
         if (!acc[listTitle][marketName]) acc[listTitle][marketName] = [];
         acc[listTitle][marketName].push({ ...item, deal });
@@ -139,10 +187,10 @@ export default function List() {
                 Crie listas separadas e a IA organizará os itens pelo mercado com melhor preço histórico.
             </p>
 
-            <div className="card" style={{ marginBottom: '2rem', border: '1px solid var(--primary)', backgroundColor: 'rgba(16, 185, 129, 0.03)' }}>
+            <div className="card" style={{ marginBottom: '2rem', border: '1px solid var(--primary)', backgroundColor: 'rgba(16, 185, 129, 0.03)', overflow: 'visible' }}>
                 <form onSubmit={addItem} style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                    <div className="form-group" style={{ flex: 2, minWidth: '150px', margin: 0 }}>
-                        <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Nome da Lista (ex: Feira Semana)</label>
+                    <div className="form-group" style={{ flex: 1.5, minWidth: '150px', margin: 0 }}>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Nome da Lista</label>
                         <input 
                             type="text" 
                             className="form-control" 
@@ -151,39 +199,178 @@ export default function List() {
                             placeholder="Minha Lista"
                         />
                     </div>
+                    
                     <div className="form-group" style={{ flex: 3, minWidth: '200px', margin: 0 }}>
                         <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Produto</label>
-                        <select 
-                            className="form-control" 
-                            value={selectedProduct} 
-                            onChange={(e) => setSelectedProduct(e.target.value)}
-                            required
-                        >
-                            <option value="">Selecione um produto...</option>
-                            {products
-                                .slice()
-                                .sort((a,b) => a.name.localeCompare(b.name))
-                                .map(p => <option key={p.id} value={p.id}>{p.name} {p.brand ? `(${p.brand})` : ''}</option>)
-                            }
-                        </select>
+                        <div className="searchable-select-container">
+                            <input 
+                                type="text"
+                                className="form-control"
+                                placeholder="Buscar produto..."
+                                value={isProductDropdownOpen ? productSearch : (products.find(p => p.id === selectedProduct)?.name || '')}
+                                onFocus={() => { setIsProductDropdownOpen(true); setProductSearch(''); }}
+                                onBlur={() => setTimeout(() => setIsProductDropdownOpen(false), 200)}
+                                onChange={(e) => setProductSearch(e.target.value)}
+                                required
+                            />
+                            {isProductDropdownOpen && (
+                                <div className="searchable-select-dropdown">
+                                    {products
+                                        .filter(p => p.name.toUpperCase().includes(productSearch.toUpperCase()))
+                                        .slice()
+                                        .sort((a,b) => a.name.localeCompare(b.name))
+                                        .map(p => (
+                                            <div 
+                                                key={p.id} 
+                                                className="searchable-select-item"
+                                                onClick={() => { 
+                                                    setSelectedProduct(p.id); 
+                                                    setProductSearch(p.name); 
+                                                    setIsProductDropdownOpen(false); 
+                                                    if (p.unit === 'kg') setQty(1);
+                                                }}
+                                            >
+                                                <span>{p.name}</span>
+                                                <span className="item-unit">{p.unit}</span>
+                                            </div>
+                                        ))
+                                    }
+                                    <div className="searchable-select-item new-item" onClick={() => { setNewProductModalOpen(true); setIsProductDropdownOpen(false); }}>
+                                        + Adicionar Novo Produto
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <div className="form-group" style={{ flex: 1, minWidth: '80px', margin: 0 }}>
-                        <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Qtd</label>
-                        <input 
-                            type="number" 
-                            className="form-control" 
-                            value={qty} 
-                            onChange={(e) => setQty(parseFloat(e.target.value) || 0)} 
-                            step="0.001"
-                            min="0.001"
-                            required
-                        />
+
+                    <div className="form-group" style={{ flex: 2, minWidth: '180px', margin: 0 }}>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Local Sugerido (Opcional)</label>
+                        <div className="searchable-select-container">
+                            <input 
+                                type="text"
+                                className="form-control"
+                                placeholder="Qualquer local..."
+                                value={isPlaceDropdownOpen ? placeSearch : (places.find(p => p.id === selectedPlaceId)?.name || '')}
+                                onFocus={() => { setIsPlaceDropdownOpen(true); setPlaceSearch(''); }}
+                                onBlur={() => setTimeout(() => setIsPlaceDropdownOpen(false), 200)}
+                                onChange={(e) => setPlaceSearch(e.target.value)}
+                            />
+                            {isPlaceDropdownOpen && (
+                                <div className="searchable-select-dropdown">
+                                    {places
+                                        .filter(p => p.name.toUpperCase().includes(placeSearch.toUpperCase()))
+                                        .slice()
+                                        .sort((a,b) => a.name.localeCompare(b.name))
+                                        .map(p => (
+                                            <div 
+                                                key={p.id} 
+                                                className="searchable-select-item"
+                                                onClick={() => { 
+                                                    setSelectedPlaceId(p.id); 
+                                                    setPlaceSearch(p.name); 
+                                                    setIsPlaceDropdownOpen(false); 
+                                                }}
+                                            >
+                                                {p.name}
+                                            </div>
+                                        ))
+                                    }
+                                    <div className="searchable-select-item new-item" onClick={() => { setNewPlaceModalOpen(true); setIsPlaceDropdownOpen(false); }}>
+                                        + Adicionar Novo Local
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
+
+                    {(!products.find(p => p.id === selectedProduct) || products.find(p => p.id === selectedProduct).unit !== 'kg') && (
+                        <div className="form-group" style={{ flex: 1, minWidth: '80px', margin: 0 }}>
+                            <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Qtd</label>
+                            <input 
+                                type="number" 
+                                className="form-control" 
+                                value={qty} 
+                                onChange={(e) => setQty(parseFloat(e.target.value) || 0)} 
+                                step="0.001"
+                                min="0.001"
+                                required
+                            />
+                        </div>
+                    )}
                     <button type="submit" className="btn btn-primary" style={{ height: '42px', flex: 1 }} disabled={loading}>
                         <PlusCircle weight="fill" style={{ marginRight: '6px' }} /> {loading ? '...' : 'Adicionar'}
                     </button>
                 </form>
             </div>
+
+            {/* Modals for creating products/places directly from list */}
+            <Modal isOpen={isNewProductModalOpen} onClose={() => setNewProductModalOpen(false)} title="Adicionar Novo Produto">
+                <form onSubmit={handleCreateNewProduct}>
+                    <div className="form-group">
+                        <label>Nome do Produto</label>
+                        <input type="text" className="form-control" required style={{ textTransform: 'uppercase' }} value={newProductData.name} onChange={e => setNewProductData({ ...newProductData, name: e.target.value.toUpperCase() })} placeholder="Ex: MAÇÃ FUJI" />
+                    </div>
+                    <div className="form-group">
+                        <label>Unidade de Medida</label>
+                        <select 
+                            className="form-control" 
+                            required 
+                            value={newProductData.unit} 
+                            onChange={e => {
+                                const u = e.target.value;
+                                setNewProductData({ 
+                                    ...newProductData, 
+                                    unit: u,
+                                    brand: (u === 'un' || u === 'pc') ? newProductData.brand : '' 
+                                });
+                            }}
+                        >
+                            <option value="un">un</option>
+                            <option value="kg">kg</option>
+                            <option value="pc">pc</option>
+                            <option value="lt">lt</option>
+                            <option value="dz">dz</option>
+                            <option value="cx">cx</option>
+                        </select>
+                    </div>
+                    {(newProductData.unit === 'un' || newProductData.unit === 'pc') && (
+                        <div className="form-group">
+                            <label>Marca (Opcional)</label>
+                            <input 
+                                type="text" 
+                                className="form-control" 
+                                value={newProductData.brand} 
+                                onChange={e => setNewProductData({ ...newProductData, brand: e.target.value.toUpperCase() })} 
+                                placeholder="Ex: CAMIL"
+                            />
+                        </div>
+                    )}
+                    <div className="form-group">
+                        <label>Categoria</label>
+                        <select className="form-control" required value={newProductData.category} onChange={e => setNewProductData({ ...newProductData, category: e.target.value })}>
+                            <option value="Geral">Geral</option>
+                            <option value="Hortifruti">Hortifruti</option>
+                            <option value="Carnes">Carnes</option>
+                            <option value="Laticínios">Laticínios</option>
+                            <option value="Padaria">Padaria</option>
+                            <option value="Limpeza">Limpeza</option>
+                            <option value="Higiene">Higiene</option>
+                            <option value="Bebidas">Bebidas</option>
+                        </select>
+                    </div>
+                    <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: '1rem' }}>Salvar Produto</button>
+                </form>
+            </Modal>
+
+            <Modal isOpen={isNewPlaceModalOpen} onClose={() => setNewPlaceModalOpen(false)} title="Adicionar Novo Local">
+                 <form onSubmit={handleCreateNewPlace}>
+                    <div className="form-group">
+                        <label>Nome do Local</label>
+                        <input type="text" className="form-control" required value={newPlaceData.name} onChange={e => setNewPlaceData({ ...newPlaceData, name: e.target.value })} placeholder="Ex: Carrefour" />
+                    </div>
+                    <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: '1rem' }}>Salvar Local</button>
+                </form>
+            </Modal>
 
             {list.length === 0 ? (
                 <div className="empty-state">

@@ -72,14 +72,17 @@ function initDb() {
         db.run(`CREATE TABLE IF NOT EXISTS ShoppingList (
             id TEXT PRIMARY KEY,
             product_id TEXT NOT NULL,
+            place_id TEXT,
             quantity REAL DEFAULT 1,
             created_at TEXT NOT NULL,
             done INTEGER DEFAULT 0,
             list_name TEXT DEFAULT 'Geral',
-            FOREIGN KEY(product_id) REFERENCES Product(id)
+            FOREIGN KEY(product_id) REFERENCES Product(id),
+            FOREIGN KEY(place_id) REFERENCES Place(id)
         )`);
 
         db.run('ALTER TABLE ShoppingList ADD COLUMN list_name TEXT DEFAULT "Geral"', (err) => {});
+        db.run('ALTER TABLE ShoppingList ADD COLUMN place_id TEXT', (err) => {});
 
         // Open/Active Shopping Sessions (for multi-device sync)
         db.run(`CREATE TABLE IF NOT EXISTS OpenShoppingSession (

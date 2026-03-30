@@ -167,9 +167,10 @@ app.get('/api/shopping-list', async (req, res) => {
     const { listName } = req.query;
     try {
         let query = `
-            SELECT sl.*, p.name as productName, p.unit
+            SELECT sl.*, p.name as productName, p.unit, pl.name as placeName
             FROM ShoppingList sl
             JOIN Product p ON sl.product_id = p.id
+            LEFT JOIN Place pl ON sl.place_id = pl.id
         `;
         let params = [];
         if (listName) {
@@ -185,10 +186,10 @@ app.get('/api/shopping-list', async (req, res) => {
 });
 
 app.post('/api/shopping-list', async (req, res) => {
-    const { productId, quantity = 1, listName = 'Geral' } = req.body;
+    const { productId, placeId = null, quantity = 1, listName = 'Geral' } = req.body;
     try {
-        // Optimization: Merging existing items in the same list
-        const existing = await dbGet('SELECT * FROM ShoppingList WHERE product_id = ? AND list_name = ? AND done = 0', [productId, listName]);
+        // Optimization: Merging existing items in the same list and same place
+        const existing = await dbGet('SELECT * FROM ShoppingList WHERE product_id = ? AND list_name = ? AND place_id IS ? AND done = 0', [productId, listName, placeId]);
         if (existing) {
             await dbRun('UPDATE ShoppingList SET quantity = quantity + ? WHERE id = ?', [quantity, existing.id]);
             await performBackupSync();
@@ -197,9 +198,9 @@ app.post('/api/shopping-list', async (req, res) => {
 
         const id = generateId();
         const now = new Date().toISOString();
-        await dbRun('INSERT INTO ShoppingList (id, product_id, quantity, created_at, done, list_name) VALUES (?, ?, ?, ?, 0, ?)', [id, productId, quantity, now, listName]);
+        await dbRun('INSERT INTO ShoppingList (id, product_id, place_id, quantity, created_at, done, list_name) VALUES (?, ?, ?, ?, ?, 0, ?)', [id, productId, placeId, quantity, now, listName]);
         await performBackupSync();
-        res.json({ id, productId, quantity, created_at: now, list_name: listName });
+        res.json({ id, productId, place_id: placeId, quantity, created_at: now, list_name: listName });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

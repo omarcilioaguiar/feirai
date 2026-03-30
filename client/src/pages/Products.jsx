@@ -8,7 +8,7 @@ export default function Products() {
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setModalOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(null);
-    const [formData, setFormData] = useState({ name: '', unit: 'kg' });
+    const [formData, setFormData] = useState({ name: '', unit: 'un', category: 'Geral', brand: '' });
 
     useEffect(() => {
         api.get('/products').then(res => setProducts(res.data)).catch(console.error);
@@ -43,13 +43,13 @@ export default function Products() {
 
     const handleEdit = (p) => {
         setIsEditing(p.id);
-        setFormData({ name: p.name, unit: p.unit });
+        setFormData({ name: p.name, unit: p.unit, category: p.category || 'Geral', brand: p.brand || '' });
         setModalOpen(true);
     };
 
     const closeModal = () => {
         setIsEditing(null);
-        setFormData({ name: '', unit: 'kg' });
+        setFormData({ name: '', unit: 'un', category: 'Geral', brand: '' });
         setModalOpen(false);
     };
 
@@ -85,8 +85,9 @@ export default function Products() {
                         <div className="card" key={p.id} style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <strong>{p.name}</strong>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                                    Unidade: {p.unit}
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', display: 'flex', gap: '10px' }}>
+                                    <span>Unidade: {p.unit}</span>
+                                    {p.brand && <span>| Marca: {p.brand}</span>}
                                 </div>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
@@ -110,13 +111,39 @@ export default function Products() {
                     </div>
                     <div className="form-group">
                         <label>Unidade de Medida</label>
-                        <select className="form-control" required value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })}>
-                            <option value="kg">Quilo (kg)</option>
-                            <option value="g">Grama (g)</option>
-                            <option value="un">Unidade (un)</option>
-                            <option value="l">Litro (l)</option>
+                        <select 
+                            className="form-control" 
+                            required 
+                            value={formData.unit} 
+                            onChange={e => {
+                                const u = e.target.value;
+                                setFormData({ 
+                                    ...formData, 
+                                    unit: u,
+                                    brand: (u === 'un' || u === 'pc') ? formData.brand : '' 
+                                });
+                            }}
+                        >
+                            <option value="un">un</option>
+                            <option value="kg">kg</option>
+                            <option value="pc">pc</option>
+                            <option value="lt">lt</option>
+                            <option value="dz">dz</option>
+                            <option value="cx">cx</option>
                         </select>
                     </div>
+                    {(formData.unit === 'un' || formData.unit === 'pc') && (
+                        <div className="form-group">
+                            <label>Marca (Opcional)</label>
+                            <input 
+                                type="text" 
+                                className="form-control" 
+                                value={formData.brand} 
+                                onChange={e => setFormData({ ...formData, brand: e.target.value.toUpperCase() })} 
+                                placeholder="Ex: CAMIL"
+                            />
+                        </div>
+                    )}
                     <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: '1rem' }}>Salvar Produto</button>
                 </form>
             </Modal>
